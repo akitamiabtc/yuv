@@ -1,0 +1,35 @@
+[package]
+name = "yuv-indexers"
+description = "YUV Node's Bitcoin indexer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuv-types = { path = "../types", features = ["messages"] }
+yuv-storage = { path = "../storage" }
+event-bus = { path = "../event-bus" }
+bitcoin-client = { path = "../bitcoin-client", features = ["mocks"] }
+
+flume = { workspace = true }
+eyre = { workspace = true }
+tokio = { workspace = true, features = [
+    "sync",
+    "rt",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
+tokio-util = { workspace = true, features = ["rt"] }
+bitcoin = { workspace = true }
+tracing = { workspace = true, features = ["attributes"] }
+async-trait = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+mockall = "0.12.1"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+once_cell = "1.18.0"

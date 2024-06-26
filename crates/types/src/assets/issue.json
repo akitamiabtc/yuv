@@ -1,0 +1,60 @@
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 108,
+    "input": [
+      {
+        "previous_output": "ac792febf9d16ca73fb38680ce34f6bb3c163d871dfbea32a502a02bfbd6bb7c:1",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "30440220204f530fdd66abe0a56b6ef5fe63fee85022346370c5faba6ad0be213d87080c0220528b528c50bf461426ed3878517246b47a79ba1fa9bae51f6f972aad8927078601",
+          "02cb60453aece04207401f08369686ae486d01b382c5e2ea82b1413802168cb229"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "6a357975760002cb60453aece04207401f08369686ae486d01b382c5e2ea82b1413802168cb229d0070000000000000000000000000000"
+      },
+      {
+        "value": 10000,
+        "script_pubkey": "001459f2c64fb9f6d6a6644ac987dc558d5ef748c702"
+      },
+      {
+        "value": 99988751,
+        "script_pubkey": "0014ee2e81fa5f235bdb1662ee1110d20eec74b4f09d"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Issue",
+    "data": {
+      "output_proofs": {
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 2000
+              },
+              "chroma": "cb60453aece04207401f08369686ae486d01b382c5e2ea82b1413802168cb229"
+            },
+            "inner_key": "02c515be9647504e94bfdc20c4629843d80ee27777b065c2af79fa97cc0eff4a23"
+          }
+        },
+        "2": {
+          "type": "EmptyPixel",
+          "data": {
+            "inner_key": "02cb60453aece04207401f08369686ae486d01b382c5e2ea82b1413802168cb229"
+          }
+        }
+      },
+      "announcement": {
+        "chroma": "cb60453aece04207401f08369686ae486d01b382c5e2ea82b1413802168cb229",
+        "amount": 2000
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 105,
+    "input": [
+      {
+        "previous_output": "b0e523c414d1e2edf8c962ae6692826236735192e652b9d95f1db90b63ffafdf:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "304402205092d36457c32d5af4359ef890cf49aa04f96451895f967057256d6586ad4c6b02204091987449ca3e5022bc93a1d90c1c0f9c531d95efaf5a9112fb9c20e806140301",
+          "02f7c6a834ac447524e388d21cf52dd8306774bfebdb2e8453c9ea456edebece13"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "001405e0e8d8d666d9443d811ce74189842c20b99ade"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014fa0dda5838877bf5fdf9db5546cad02874c0730f"
+      },
+      {
+        "value": 7791,
+        "script_pubkey": "00144b0d23c0d436c7f83b615fb2105bd0bbe9083510"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Transfer",
+    "data": {
+      "input_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 10000
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        }
+      },
+      "output_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 666
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "026fa1c41030da13251e2f0af02beb215d280d831374bed0e360f31343f79f9a5c"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9334
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        },
+        "2": {
+          "type": "EmptyPixel",
+          "data": {
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        }
+      }
+    }
+  }
+}

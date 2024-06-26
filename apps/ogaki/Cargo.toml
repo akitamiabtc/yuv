@@ -1,0 +1,26 @@
+[package]
+name = "ogaki"
+description = '''
+Utility for automatic update-n-start process of YUVd binaries.
+'''
+edition.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["full"], default-features = false }
+serde = { version = "1.0", features = ["derive"], default-features = false }
+serde_json = { workspace = true, default-features = false }
+semver = { version = "1.0", default-features = false, features = [ "std" ] }
+flate2 = { version = "1.0", features = ["zlib"], default-features = false }
+tar = { version = "0.4", default-features = false }
+which = { version = "4.2", default-features = false }
+bytes = { version = "1.0", default-features = false }
+clap = { version = "4.3.23", features = ["derive"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+nix = { version = "0.25" }
+eyre = { workspace = true }
+tracing = { workspace = true, features = [ "attributes" ] }
+tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+thiserror = { workspace = true }
+color-eyre = { workspace = true }

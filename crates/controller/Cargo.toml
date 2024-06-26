@@ -1,0 +1,20 @@
+[package]
+name = "yuv-controller"
+description = "YUV Node's message handler from the network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuv-storage = { path = "../storage" }
+yuv-types = { path = "../types", features = ["messages", "consensus"] }
+event-bus = { path = "../event-bus" }
+yuv-p2p = { path = "../p2p" }
+
+bitcoin = { workspace = true, features = ["serde"] }
+tracing = { workspace = true }
+eyre = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+tokio-util = { workspace = true }
+uuid = { workspace = true }

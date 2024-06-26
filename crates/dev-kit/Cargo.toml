@@ -1,0 +1,33 @@
+[package]
+name = "ydk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+bulletproof = ["yuv-pixels/bulletproof", "yuv-types/bulletproof"]
+
+[dependencies]
+bdk = { path = "../bdk", features = ["sqlite", "rpc", "use-esplora-blocking"] }
+tokio = { workspace = true, features = ["sync"] }
+yuv-types = { path = "../types", features = ["messages"] }
+yuv-pixels = { path = "../pixels" }
+bulletproof = { path = "../bulletproof" }
+yuv-rpc-api = { path = "../rpc-api", features = ["client"] }
+yuv-storage = { path = "../storage" }
+bitcoin-client = { path = "../bitcoin-client" }
+
+rand = { version = "0.8.5" }
+hashbrown = { version = "0.14.5" }
+serde = { workspace = true }
+eyre = { workspace = true }
+tracing = { workspace = true }
+bitcoin = { workspace = true, features = ["serde", "base64", "rand"] }
+jsonrpsee = { workspace = true }
+futures = { workspace = true }
+ciborium = { workspace = true }
+
+[dev-dependencies]
+once_cell = { version = "1.18.0" }
+tokio = { workspace = true, features = ["macros", "test-util"] }

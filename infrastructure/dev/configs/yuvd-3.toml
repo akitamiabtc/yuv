@@ -1,0 +1,38 @@
+network = "regtest" # network type, accepting values: bitcoin, testnet, regtest, sigtest
+
+# config-1.toml
+[p2p]
+address = "0.0.0.0:8003" # address on which node will listen p2p connections
+max_inbound_connections = 16 # maximum number of inbound connections
+max_outbound_connections = 8 # maximum number of outbound connections
+bootnodes = [
+    "yuvd:8001",
+    "yuvd2:8002",
+] # list of ipv4 addresses to which this node will connect to
+
+[rpc]
+address = "0.0.0.0:18336" # address on which RPC API will be served.
+
+[storage]
+path = "/var/yuvd"       # path to directory with stored txs.
+create_if_missing = true
+tx_per_page = 100
+
+[checkers]
+pool_size = 4 # how many checker workers will node have
+
+[bnode]
+url = "http://bitcoind:18443"                    # url to bitcoin node
+auth = { username = "admin1", password = "123" } # bitcoin node auth
+
+[logger]
+level = "INFO" # level logging, accepting values: TRACE, DEBUG, INFO, WARN, ERROR
+
+[indexer]
+polling_period = { secs = 5, nanos = 0 } # interval between indexer runs
+# max time after each transaction should be discarded from pool
+max_confirmation_time = { secs = 86400, nanos = 0 }
+
+[controller]
+max_inv_size = 10000      # max number of txs in inv message
+inv_sharing_interval = 10 # interval between inv messages

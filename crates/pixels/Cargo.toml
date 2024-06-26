@@ -1,0 +1,28 @@
+[package]
+name = "yuv-pixels"
+description = "Provides cryptography implementation to YUV protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+serde = ["dep:serde", "bitcoin/serde"]
+default = ["serde", "std"]
+std = ["bitcoin/std", "bitcoin/rand-std"]
+no-std = ["bitcoin/no-std"]
+bulletproof = ["dep:bulletproof", "std"]
+consensus = []
+
+[dependencies]
+bulletproof = { path = "../bulletproof", optional = true }
+
+bitcoin = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+hex = { version = "0.4.3" }
+core2 = { version = "0.3.3" }
+hashbrown = { version = "0.14.5" }
+
+[dev-dependencies]
+once_cell = "1.18.0"

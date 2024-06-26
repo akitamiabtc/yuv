@@ -1,0 +1,85 @@
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 316,
+    "input": [
+      {
+        "previous_output": "034d77f6f564ad3a5247707acda0d40f3442edced7d99b8523279a8ea0745d70:2",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "304402201a1ad77c07adc6c49b91b27d02c8eec6d5f82740bd3162d0c1604a8009fef66402202d6ac174fc67b6a863831c0f5cc5a4996d90fbf9778aecfacd5c85b7fe6d8a5f01",
+          "037bf59465bf6cb3faa969e963c6934a2bee2b38c5d981c0b2226ed669149945db"
+        ]
+      },
+      {
+        "previous_output": "034d77f6f564ad3a5247707acda0d40f3442edced7d99b8523279a8ea0745d70:1",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "3044022010779706abc5d86219a63801e3b18fb55dc77468dd1d39a32906e3a03ad3c65b02206a4ca88428d03c1cecc22640cbfa2c44c826f1ebf2509f1ad5505646b2a650cc01",
+          "0219346c888c41e91734f024de0f2b9bdd68ae98a8f06e31ff929f1c820d663266"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "0014fe15f198aab00c032fe541500521dee51135f196"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014040e3dc918ea75c4b6b7cd101ccba1f4c3da722a"
+      },
+      {
+        "value": 6500,
+        "script_pubkey": "0014ff3fdc9cf8b4433c4ed144c49505914f67836e99"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Transfer",
+    "data": {
+      "input_proofs": {
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9334
+              },
+              "chroma": "5510996bdb5271f84896eb42ea5b6c4ba3bd96f90a605c70a7f2b402f0afdad0"
+            },
+            "inner_key": "037bf59465bf6cb3faa969e963c6934a2bee2b38c5d981c0b2226ed669149945db"
+          }
+        }
+      },
+      "output_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1000
+              },
+              "chroma": "5510996bdb5271f84896eb42ea5b6c4ba3bd96f90a605c70a7f2b402f0afdad0"
+            },
+            "inner_key": "025510996bdb5271f84896eb42ea5b6c4ba3bd96f90a605c70a7f2b402f0afdad0"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 8334
+              },
+              "chroma": "5510996bdb5271f84896eb42ea5b6c4ba3bd96f90a605c70a7f2b402f0afdad0"
+            },
+            "inner_key": "037bf59465bf6cb3faa969e963c6934a2bee2b38c5d981c0b2226ed669149945db"
+          }
+        }
+      }
+    }
+  }
+}

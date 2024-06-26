@@ -1,0 +1,19 @@
+[package]
+name = "yuv-rpc-api"
+description = "YUV Node's JSON RPC Server declaration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+client = ["jsonrpsee/http-client", "jsonrpsee/async-client"]
+
+[dependencies]
+yuv-types = { path = "../types" }
+yuv-pixels = { path = "../pixels" }
+
+jsonrpsee = { workspace = true, features = ["server", "macros"] }
+async-trait = { workspace = true }
+bitcoin = { workspace = true }
+serde = { workspace = true }

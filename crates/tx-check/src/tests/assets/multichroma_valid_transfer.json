@@ -1,0 +1,135 @@
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 106,
+    "input": [
+      {
+        "previous_output": "b22ab416c7511b91444d4858f5e87b43024733ab6db9b43f83976e885e83a7f7:1",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "3044022020ffedffe72bd5e3b7ef0566c99b2d7762786bb74f33a84962c95a43ebbc7ea002202b2d1b18e26d91a918513be25bd6d939867ea9fde81c1f8a57e058be72d2ea5601",
+          "0392033591781eecc61773cd0a9b119160481f53cc5651c17396d61b710c4569ca"
+        ]
+      },
+      {
+        "previous_output": "e55d74a8cae2b9b283e5874979df6eff34f8955ac2dc1cfb19f07fc71999a4ff:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "304402207fba52661455ad9894f4d5c7c2f31f283211f70f5926f041ee19d7a9b4f96a65022078361a6a0f67890ccefca18d9735d73fb40df2d1b5e7eab39d9c5b9d9011c4e301",
+          "020edfa78301c6f93d90a6dc59c100065a20add3110ced3cbf2f23da94e9121fd2"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "001405e0e8d8d666d9443d811ce74189842c20b99ade"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014a83a1ef0a0aa4fbf2f7467fd9ab6104bd35edd36"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014d7c02f378eb4549939fb2a5b507fa430d88350ca"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "001434f87a20cab79609d8daf6c932f27015e33362b2"
+      },
+      {
+        "value": 6635,
+        "script_pubkey": "00144b0d23c0d436c7f83b615fb2105bd0bbe9083510"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Transfer",
+    "data": {
+      "input_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9334
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 10000
+              },
+              "chroma": "11c07b675a2edfc7d14fa2d75f7d4cf575d3b48803b232733a9488855bdaa4b0"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        }
+      },
+      "output_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 666
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "026fa1c41030da13251e2f0af02beb215d280d831374bed0e360f31343f79f9a5c"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1234
+              },
+              "chroma": "11c07b675a2edfc7d14fa2d75f7d4cf575d3b48803b232733a9488855bdaa4b0"
+            },
+            "inner_key": "026fa1c41030da13251e2f0af02beb215d280d831374bed0e360f31343f79f9a5c"
+          }
+        },
+        "2": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 8668
+              },
+              "chroma": "7fe31b731cace889377d4e6c0148a1f2d584da949941cc0c1fbeeeceb39a84f1"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        },
+        "3": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 8766
+              },
+              "chroma": "11c07b675a2edfc7d14fa2d75f7d4cf575d3b48803b232733a9488855bdaa4b0"
+            },
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        },
+        "4": {
+          "type": "EmptyPixel",
+          "data": {
+            "inner_key": "0277458b2b33a860436ecb2ec2e2db12cca2b3f3b28dba58d0b687828f331e7342"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+[package]
+name = "yuv-rpc-server"
+description = "YUV Node's JSON RPC Server implementation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+event-bus = { path = "../event-bus" }
+yuv-types = { path = "../types" }
+yuv-pixels = { path = "../pixels" }
+yuv-storage = { path = "../storage" }
+yuv-rpc-api = { path = "../rpc-api" }
+yuv-tx-check = { path = "../tx-check" }
+bitcoin-client = { path = "../bitcoin-client" }
+
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+bitcoin = { workspace = true }
+tracing = { workspace = true }
+jsonrpsee = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+eyre = { workspace = true }

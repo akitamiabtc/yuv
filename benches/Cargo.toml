@@ -1,0 +1,32 @@
+[package]
+name = "benchmarks"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+yuv-pixels          = { path = "../crates/pixels" }
+yuv-tx-check        = { path = "../crates/tx-check" }
+yuv-tx-attach       = { path = "../crates/tx-attach" }
+yuv-p2p             = { path = "../crates/p2p", features = ["mocks"] }
+bitcoin-client      = { path = "../crates/bitcoin-client", features = ["mocks"] }
+yuv-storage         = { path = "../crates/storage" }
+event-bus           = { path = "../crates/event-bus" }
+yuv-types           = { path = "../crates/types" }
+yuv-controller      = { path = "../crates/controller" }
+criterion           = { version = "0.5.1", features = ["async_futures"]  }
+rand                = { version = "0.8.5" }
+lazy_static         = { version = "1.4.0" }
+
+serde_json = { workspace = true }
+bitcoin    = { workspace = true, features = ["serde", "rand"] }
+eyre       = { workspace = true }
+tokio      = { workspace = true, features = ["time", "rt-multi-thread"] }
+tokio-util = { workspace = true }
+
+async-trait = "0.1.73"
+
+[[bench]]
+name = "controller_benchmark"
+harness = false

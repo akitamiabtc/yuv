@@ -1,0 +1,145 @@
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 480,
+    "input": [
+      {
+        "previous_output": "9b814eac5afe48afad262b39614fde2ede79eeada998f78f6f3b655c8a6afbea:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "304402203a954cfcb4bc45dbb438772163dd5d3d5f4e7c190cc2165e2f837620dd422c0102204b45fa6249c484a9a88d58379547af5f614ef12a333c643e4f9a84ddb396a25401",
+          "0326ba0d9031f3b0e718f7a18bef700eaf7277b006fff2417c109a7cff04c65074"
+        ]
+      },
+      {
+        "previous_output": "b24a71a7f8f372d007e29656334e947c40eae7f99bb6bc9d37f32404117ffb16:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "30440220134057a68423da9acb45dea4f2877eef7d8a89b9137e5579e9707fd878ca3ba402200456deea40c517d744302607fbdab88fc9351a2640c684e5e495bf6a9f279e2f01",
+          "02cd44e05aedde726f43bccddc5b6f55287f7da28c525a4c759867a812b6adffab"
+        ]
+      },
+      {
+        "previous_output": "f6c13a5e76626c6071a73a4bb772a0ff6019c1fb9e4ec314ac7705d68e1e615b:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "304402201e8f81a0983e529a5644c3286404d5d657b4285b848e4ba949e4e2df43eb0e90022065b2743f8145582a5b20b4205b29e588dea874d844a01927ba04a4d18dd361e301",
+          "0202560dadf08d8542ceff7e418c29ca2166c9d54665c326e5da1815688e096e1e"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "001432fd6d6f20f9a6cf70f19d7d7766b03b4e757f49"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014967bbfcd70e105ba823b1a4262b50b9c598f6074"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014202629a483ce95259cb60c54da8def9116d83f81"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "00143de838a2dccbbd2a45f5de275835a0c204ced58c"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014177ef8fb23112d500ac0de72916e9057148a9e24"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "0014cb2d972b3749ac2975acc3fabcdd763d82deb363"
+      },
+      {
+        "value": 23568,
+        "script_pubkey": "001402d3d02edf1f9a0b62192146a2fd4f8b15a6485b"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Transfer",
+    "data": {
+      "input_proofs": {},
+      "output_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1000
+              },
+              "chroma": "a0a017d8dfe0f1234e6e4f02bccb777a4b955b9e7de1fedebe62ec1ca30c4f94"
+            },
+            "inner_key": "02a0a017d8dfe0f1234e6e4f02bccb777a4b955b9e7de1fedebe62ec1ca30c4f94"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1000
+              },
+              "chroma": "c3f19bb6700ac93aaff9e02e49ff57d335360c4e95fc6b1c437777ef92d09533"
+            },
+            "inner_key": "02a0a017d8dfe0f1234e6e4f02bccb777a4b955b9e7de1fedebe62ec1ca30c4f94"
+          }
+        },
+        "2": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1000
+              },
+              "chroma": "195d9b7a71970b4359562cd4a6c8209829544f5976ff60ca8a43534039642c7b"
+            },
+            "inner_key": "02a0a017d8dfe0f1234e6e4f02bccb777a4b955b9e7de1fedebe62ec1ca30c4f94"
+          }
+        },
+        "3": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9000
+              },
+              "chroma": "a0a017d8dfe0f1234e6e4f02bccb777a4b955b9e7de1fedebe62ec1ca30c4f94"
+            },
+            "inner_key": "02fb21667a6aa1470d7dc232963596e12cafcb119914c819290783a075555ad3c1"
+          }
+        },
+        "4": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9000
+              },
+              "chroma": "c3f19bb6700ac93aaff9e02e49ff57d335360c4e95fc6b1c437777ef92d09533"
+            },
+            "inner_key": "02fb21667a6aa1470d7dc232963596e12cafcb119914c819290783a075555ad3c1"
+          }
+        },
+        "5": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9000
+              },
+              "chroma": "195d9b7a71970b4359562cd4a6c8209829544f5976ff60ca8a43534039642c7b"
+            },
+            "inner_key": "02fb21667a6aa1470d7dc232963596e12cafcb119914c819290783a075555ad3c1"
+          }
+        }
+      }
+    }
+  }
+}

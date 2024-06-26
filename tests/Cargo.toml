@@ -1,0 +1,18 @@
+[package]
+name = "tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dev-dependencies]
+ydk = { path = "../crates/dev-kit" }
+yuv-types = { path = "../crates/types" }
+tokio = { workspace = true, features = ["sync", "macros", "test-util"] }
+yuv-rpc-api = { path = "../crates/rpc-api", features = ["client"] }
+bitcoin-client = { path = "../crates/bitcoin-client" }
+bdk = { path = "../crates/bdk", features = ["sqlite", "rpc", "use-esplora-blocking"] }
+once_cell = { version = "1.18.0" }
+eyre = { workspace = true }
+bitcoin = { workspace = true, features = ["serde", "base64", "rand"] }
+jsonrpsee = { workspace = true }

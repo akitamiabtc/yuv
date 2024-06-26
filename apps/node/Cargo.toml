@@ -1,0 +1,37 @@
+[package]
+name = "yuvd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+bulletproof = ["yuv-tx-check/bulletproof", "yuv-tx-attach/bulletproof"]
+
+[dependencies]
+yuv-storage = { path = "../../crates/storage", features = ["leveldb"] }
+yuv-types = { path = "../../crates/types" }
+yuv-controller = { path = "../../crates/controller" }
+yuv-tx-check = { path = "../../crates/tx-check" }
+bitcoin-client = { path = "../../crates/bitcoin-client" }
+yuv-tx-attach = { path = "../../crates/tx-attach" }
+yuv-tx-confirm = { path = "../../crates/tx-confirm" }
+yuv-rpc-server = { path = "../../crates/rpc-server" }
+yuv-indexers = { path = "../../crates/indexers" }
+event-bus = { path = "../../crates/event-bus" }
+yuv-p2p = { path = "../../crates/p2p" }
+
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+bitcoin = { workspace = true, features = ["serde"] }
+eyre = { workspace = true }
+serde = { workspace = true }
+config = { workspace = true }
+
+fastrand = { version = "2.0.1" }
+clap = { version = "4.1.6", features = ["derive", "cargo"] }
+serde_json = { version = "1.0" }
+uuid = { version = "1.4.1", features = ["serde", "v4"] }
+chrono = { version = "0.4.35" }

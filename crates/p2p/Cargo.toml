@@ -1,0 +1,38 @@
+[package]
+name = "yuv-p2p"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+mocks = ["dep:mockall"]
+
+[dependencies]
+bitcoin_hashes = { version = "0.11.0" }
+nonempty = { version = "0.7" }
+popol = { version = "2" }
+socket2 = { version = "0.4" }
+libc = { version = "0.2" }
+trust-dns-resolver = { version = "0.23.0" }
+log = { version = "0.4.20" }
+crossbeam-channel = { version = "0.5.6" }
+fastrand = { version = "2.0.1" }
+microserde = { version = "0.1" }
+quickcheck = { version = "1" }
+
+event-bus = { path = "../event-bus" }
+yuv-types = { path = "../types", features = ["messages", "consensus"] }
+
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+eyre = { workspace = true }
+async-trait = { workspace = true }
+flume = { workspace = true }
+bitcoin = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+tokio-util = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt"] }
+serde = { workspace = true }
+mockall = { workspace = true, optional = true }

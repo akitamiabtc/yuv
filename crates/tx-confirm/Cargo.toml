@@ -1,0 +1,23 @@
+[package]
+name = "yuv-tx-confirm"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuv-types = { path = "../types", features = ["messages"] }
+event-bus = { path = "../event-bus" }
+bitcoin-client = { path = "../bitcoin-client", features = ["mocks"] }
+
+eyre = { workspace = true }
+tokio = { workspace = true, features = [
+    "sync",
+    "rt",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
+tokio-util = { workspace = true }
+bitcoin = { workspace = true }
+tracing = { workspace = true }

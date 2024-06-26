@@ -1,0 +1,124 @@
+name: Build Release binaries
+
+on:
+  push:
+    tags:
+      - '*'
+
+  workflow_dispatch:
+
+jobs:
+  release-windows:
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+    name: Windows Release
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    timeout-minutes: 30
+
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: For set up vcpkg
+        run: |
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Install dependencies
+        run: vcpkg install openssl:x64-windows-static-md sqlite3
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: ./.github/actions/rust-setup
+
+      - name: Build and package CLI for Windows
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: yuv-cli
+          features: sqlite-bundled
+          target: ${{ matrix.target }}
+          zip: windows
+          checksum: sha256
+          archive: yuv-cli-${{ github.ref_name }}-${{ matrix.target }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  release-unix:
+    name: ${{ matrix.os }} Release ${{ matrix.target }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+
+    timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: ./.github/actions/rust-setup
+
+      - name: Build and package node and CLI for ${{ matrix.os }}
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: yuv-cli,yuvd
+          target: ${{ matrix.target }}
+          tar: unix
+          zip: windows
+          checksum: sha256
+          archive: yuv-${{ github.ref_name }}-${{ matrix.target }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-ogaki:
+    name: Build Docker images for release
+    permissions:
+      packages: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase repo owner to env
+        run: |
+          echo "REPO_OWNER=`echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]'`" >> $GITHUB_ENV
+      - name: Build image with pushing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infrastructure/build/yuvd-autoupdates.dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ env.REPO_OWNER }}/yuvd:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

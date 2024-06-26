@@ -1,0 +1,37 @@
+[package]
+name = "yuv-storage"
+description = "YUV Node's storage implementation(s)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["leveldb"]
+leveldb = ["dep:rusty-leveldb"]
+
+[dependencies]
+yuv-types = { path = "../types", features = ["serde"] }
+yuv-pixels = { path = "../pixels", features = ["serde"] }
+
+bitcoin = { workspace = true, features = ["serde"] }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+eyre = { workspace = true }
+serde = { workspace = true }
+
+ciborium = { workspace = true }
+serde_bytes = { version = "0.11.14" }
+
+tokio = { workspace = true, features = [
+    "sync",
+    "rt",
+], default-features = false }
+
+[dependencies.rusty-leveldb]
+version = "3.0.0"
+optional = true
+features = ["async"]
+
+[dev-dependencies]
+tokio-test = { version = "0.4.3" }

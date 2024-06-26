@@ -1,0 +1,24 @@
+[package]
+name = "bitcoin-client"
+description = "Async Bitcoin RPC client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+mocks = ["dep:mockall"]
+
+[dependencies]
+tokio = { workspace = true, features = ["rt", "sync"] }
+bitcoin = { workspace = true, features = ["serde"] }
+bitcoin-internals = { version = "0.1.0", package = "bitcoin-private" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+
+mockall = { workspace = true, optional = true }
+
+jsonrpc = { path = "../jsonrpc", features = ["reqwest_http"] }
+log = { version = "0.4.20" }

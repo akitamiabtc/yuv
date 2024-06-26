@@ -1,0 +1,148 @@
+[package]
+name = "bdk"
+version = "0.29.0+fix.1"
+edition = "2018"
+authors = ["Alekos Filini <alekos.filini@gmail.com>", "Riccardo Casatta <riccardo@casatta.it>"]
+description = "A modern, lightweight, descriptor-based wallet library"
+keywords = ["bitcoin", "wallet", "descriptor", "psbt"]
+readme = "README.md"
+license = "MIT"
+repository.workspace = true
+
+[dependencies]
+bdk-macros = "^0.6"
+log = "0.4"
+miniscript = { version = "10.0", default-features = false, features = ["serde"] }
+bitcoin = { workspace = true, default-features = false, features = ["serde", "base64", "rand-std"] }
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = { version = "^1.0" }
+rand = "^0.8"
+
+# Optional dependencies
+sled = { version = "0.34", optional = true }
+electrum-client = { version = "0.18", optional = true, features = ["use-openssl", "proxy"], default-features = false }
+esplora-client = { version = "0.6", default-features = false, optional = true }
+rusqlite = { version = "0.28.0", optional = true }
+ahash = { version = "0.7.6", optional = true }
+futures = { version = "0.3", optional = true }
+async-trait = { version = "0.1", optional = true }
+rocksdb = { version = "0.21.0", default-features = false, features = ["snappy"], optional = true }
+cc = { version = ">=1.0.64", optional = true }
+socks = { version = "0.3", optional = true }
+hwi = { version = "0.7", optional = true, features = ["miniscript"] }
+bip39 = { version = "2.0.0", optional = true }
+bitcoinconsensus = { version = "0.19.0-3", optional = true }
+
+# Needed by bdk_blockchain_tests macro and the `rpc` feature
+bitcoincore-rpc = { package="core-rpc", version = "0.17", optional = true }
+
+# Platform-specific dependencies
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = "0.2"
+async-trait = "0.1"
+js-sys = "0.3"
+
+[features]
+minimal = []
+compiler = ["miniscript/compiler"]
+verify = ["bitcoinconsensus"]
+default = ["std", "key-value-db", "electrum"]
+# std feature is always required unless building for wasm32-unknown-unknown target
+# if building for wasm user must add dependencies bitcoin/no-std,miniscript/no-std
+std = ["bitcoin/std", "miniscript/std"]
+sqlite = ["rusqlite", "ahash"]
+sqlite-bundled = ["sqlite", "rusqlite/bundled"]
+compact_filters = ["rocksdb", "socks", "cc"]
+key-value-db = ["sled"]
+all-keys = ["keys-bip39"]
+keys-bip39 = ["bip39"]
+rpc = ["bitcoincore-rpc"]
+
+# We currently provide mulitple implementations of `Blockchain`, all are
+# blocking except for the `EsploraBlockchain` which can be either async or
+# blocking, depending on the HTTP client in use.
+#
+# - Users wanting asynchronous HTTP calls should enable `async-interface` to get
+#   access to the asynchronous method implementations. Then, if Esplora is wanted,
+#   enable the `use-esplora-async` feature.
+# - Users wanting blocking HTTP calls can use any of the other blockchain
+#   implementations (`compact_filters`, `electrum`, or `esplora`). Users wanting to
+#   use Esplora should enable the `use-esplora-blocking` feature.
+#
+# WARNING: Please take care with the features below, various combinations will
+# fail to build. We cannot currently build `bdk` with `--all-features`.
+async-interface = ["async-trait"]
+electrum = ["electrum-client"]
+# MUST ALSO USE `--no-default-features`.
+use-esplora-async = ["esplora", "esplora-client/async", "futures"]
+use-esplora-blocking = ["esplora", "esplora-client/blocking"]
+# Deprecated aliases
+use-esplora-reqwest = ["use-esplora-async"]
+use-esplora-ureq = ["use-esplora-blocking"]
+# Typical configurations will not need to use `esplora` feature directly.
+esplora = []
+
+# Use below feature with `use-esplora-async` to enable reqwest default TLS support
+reqwest-default-tls = ["esplora-client/async-https"]
+
+# Debug/Test features
+test-blockchains = ["bitcoincore-rpc", "electrum-client"]
+
+# This feature is used to run `cargo check` in our CI targeting wasm. It's not recommended
+# for libraries to explicitly include the "getrandom/js" feature, so we only do it when
+# necessary for running our CI. See: https://docs.rs/getrandom/0.2.8/getrandom/#webassembly-support
+dev-getrandom-wasm = ["getrandom/js"]
+
+[dev-dependencies]
+miniscript = { version = "10.0", features = ["std"] }
+bitcoin = { workspace = true, features = ["std"] }
+lazy_static = "1.4"
+env_logger = { version = "0.7", default-features = false }
+electrsd = "0.24"
+assert_matches = "1.5.0"
+
+[[example]]
+name = "compact_filters_balance"
+required-features = ["compact_filters"]
+
+[[example]]
+name = "miniscriptc"
+path = "examples/compiler.rs"
+required-features = ["compiler"]
+
+[[example]]
+name = "policy"
+path = "examples/policy.rs"
+
+[[example]]
+name = "psbt_signer"
+path = "examples/psbt_signer.rs"
+required-features = ["electrum"]
+
+[[example]]
+name = "electrum_backend"
+path = "examples/electrum_backend.rs"
+required-features = ["electrum"]
+
+[[example]]
+name = "esplora_backend_synchronous"
+path = "examples/esplora_backend_synchronous.rs"
+required-features = ["use-esplora-ureq"]
+
+[[example]]
+name = "esplora_backend_asynchronous"
+path = "examples/esplora_backend_asynchronous.rs"
+required-features = ["use-esplora-reqwest", "reqwest-default-tls", "async-interface"]
+
+[[example]]
+name = "mnemonic_to_descriptors"
+path = "examples/mnemonic_to_descriptors.rs"
+required-features = ["all-keys"]
+
+[package.metadata.docs.rs]
+features = ["compiler", "electrum", "esplora", "use-esplora-blocking", "compact_filters", "rpc", "key-value-db", "sqlite", "all-keys", "verify", "hardware-signer"]
+# defines the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]

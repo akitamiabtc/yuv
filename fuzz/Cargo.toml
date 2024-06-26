@@ -1,0 +1,13 @@
+[package]
+name = "fuzz"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+yuv-pixels = { path = "../crates/pixels" }
+afl = { version = "0.15.3" }
+once_cell = "1.18.0"
+
+bitcoin = { workspace = true, features = ["rand"] }
