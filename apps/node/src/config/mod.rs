@@ -13,9 +13,6 @@ pub use rpc::RpcConfig;
 mod storage;
 pub use storage::StorageConfig;
 
-mod checkers;
-pub use checkers::CheckersConfig;
-
 mod bnode;
 pub use bnode::BitcoinConfig;
 
@@ -41,9 +38,6 @@ pub struct NodeConfig {
 
     #[serde(default)]
     pub shutdown_timeout: Option<u64>,
-
-    #[serde(default)]
-    pub checkers: CheckersConfig,
 
     #[serde(default)]
     pub logger: LoggerConfig,

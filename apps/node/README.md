@@ -31,9 +31,6 @@ create_if_missing = true # Create database if missing with all missing directori
 tx_per_page = 100 # Number of transactions per one page return by `getlistrawyuvtransactions`
 flush_period = 100 # responds for the saving data period (in sececonds) 
 
-[checkers]
-pool_size = 4 # how many checker workers will node have
-
 [bnode]
 url = "http://127.0.0.1:18443" # url to bitcoin node
 auth = { username = "admin1", password = "123" } # bitcoin node auth

@@ -9,6 +9,9 @@ pub use transactions::TransactionsStorage;
 mod invalid;
 pub use invalid::InvalidTxsStorage;
 
+mod mempool;
+pub use mempool::{MempoolEntryStorage, MempoolStatus, MempoolStorage, MempoolTxEntry};
+
 mod inventory;
 pub use inventory::InventoryStorage;
 
@@ -18,7 +21,6 @@ pub use pages::PagesStorage;
 
 mod indexed_block;
 pub use indexed_block::BlockIndexerStorage;
-pub use indexed_block::IsIndexedStorage;
 
 mod frozen;
 pub use frozen::FrozenTxsStorage;

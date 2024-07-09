@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 mod common;
 use common::*;
 use ydk::{types::FeeRateStrategy, wallet::SyncOptions};
-use yuv_rpc_api::transactions::YuvTransactionsRpcClient;
+use yuv_rpc_api::transactions::{ProvideYuvProofRequest, YuvTransactionsRpcClient};
 
 const NUMBER_OF_TRANSFERS: i32 = 2;
 const EXTRA_YUV_NODE_URL: &str = "http://127.0.0.1:18335";
@@ -86,9 +86,13 @@ async fn test_provide_list_yuv_proofs() -> eyre::Result<()> {
 
     // This vector is later used to provide txs to another YUV node
     let mut raw_txs = Vec::new();
-    raw_txs.push(usd_issuance.clone());
+    raw_txs.push(ProvideYuvProofRequest::new(
+        usd_txid,
+        usd_issuance.tx_type.clone(),
+        None,
+    ));
 
-    yuv_client_1.send_raw_yuv_tx(usd_issuance, None).await?;
+    yuv_client_1.send_yuv_tx(usd_issuance.hex(), None).await?;
 
     // Add block with issuance to the chain
     blockchain_rpc.generate_to_address(1, &alice.address()?)?;
@@ -131,10 +135,14 @@ async fn test_provide_list_yuv_proofs() -> eyre::Result<()> {
 
         let txid = alice_bob_transfer.bitcoin_tx.txid();
 
-        raw_txs.push(alice_bob_transfer.clone());
+        raw_txs.push(ProvideYuvProofRequest::new(
+            txid,
+            alice_bob_transfer.tx_type.clone(),
+            None,
+        ));
 
         yuv_client_1
-            .send_raw_yuv_tx(alice_bob_transfer, None)
+            .send_yuv_tx(alice_bob_transfer.hex(), None)
             .await?;
 
         // Add block with transfer to the chain
@@ -167,7 +175,7 @@ async fn test_provide_list_yuv_proofs() -> eyre::Result<()> {
 
     // Wait for the txs to get attached
     for raw_tx in raw_txs {
-        let tx = wait_until_reject_or_attach(raw_tx.bitcoin_tx.txid(), &yuv_client_2).await?;
+        let tx = wait_until_reject_or_attach(raw_tx.txid, &yuv_client_2).await?;
 
         assert_attached!(tx, "USD transfer should be attached");
     }

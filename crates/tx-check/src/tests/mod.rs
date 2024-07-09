@@ -3,6 +3,8 @@ use yuv_types::YuvTransaction;
 
 use crate::check_transaction;
 
+mod script_parser;
+
 static VALID_MULTICHROMA_TRANSFER: Lazy<YuvTransaction> = Lazy::new(|| {
     serde_json::from_str::<YuvTransaction>(include_str!("./assets/multichroma_valid_transfer.json"))
         .expect("JSON was not well-formatted")

@@ -1,29 +1,108 @@
-use bitcoin::{Transaction, Txid};
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use yuv_pixels::Chroma;
-use yuv_types::announcements::ChromaInfo;
+use bitcoin::{BlockHash, Transaction, Txid};
+use serde::Deserialize;
+use yuv_storage::MempoolStatus;
 use yuv_types::{YuvTransaction, YuvTxType};
 
-/// Response for [`getrawyuvtransaction`](YuvTransactionsRpcServer::get_raw_yuv_transaction) RPC
-/// method.
+#[cfg(any(feature = "client", feature = "server"))]
+mod rpc;
+#[cfg(any(feature = "client", feature = "server"))]
+pub use self::rpc::*;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case", tag = "status", content = "data")]
-pub enum GetRawYuvTransactionResponse {
+#[serde(rename_all = "snake_case")]
+/// Describes YUV transaction status.
+pub enum YuvTransactionStatus {
     /// Transaction is not found.
     ///
     /// Provided proof was rejected, or no proofs were provided yet.
     None,
-
-    /// Transaction is found and it's raw data is provided, but it's in the queue to be checked.
-    Pending,
-
-    /// Transaction is found, it's raw data is provided, and it's checked, but node has
-    /// no parent transactions to attach it.
-    Checked,
-
-    /// Transaction is found, it's raw data is provided, it's checked, and the node has
+    /// Transaction is found, it's raw data is provided, but it's in the queue to be checked.
+    Initialized,
+    /// Transaction is found, it's raw data is provided, it's partially checked, but hasn't
+    /// appeared in the blockchain yet.
+    WaitingMined,
+    /// Transaction is found, it's raw data is provided, it's partially checked, but is waiting for
+    /// enough confirmations.
+    Mined,
+    /// Transaction is found, it's raw data is provided, it's fully checked, but is waiting to get
+    /// attached.
+    Attaching,
+    /// Transaction is found, it's raw data is provided, it's fully checked, and the node has
     /// all parent transactions to attach it.
-    Attached(YuvTransaction),
+    Attached,
+    /// TODO: This status is used for `get_raw_yuv_transaction` only and will soon be removed.
+    Pending,
+}
+
+impl From<MempoolStatus> for YuvTransactionStatus {
+    fn from(value: MempoolStatus) -> Self {
+        match value {
+            MempoolStatus::Initialized => Self::Initialized,
+            MempoolStatus::WaitingMined => Self::WaitingMined,
+            MempoolStatus::Mined => Self::Mined,
+            MempoolStatus::Attaching => Self::Attaching,
+        }
+    }
+}
+
+/// Json encoded response for [`getrawyuvtransaction`](YuvTransactionsRpcServer::get_raw_yuv_transaction) RPC
+/// method.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct GetRawYuvTransactionResponseJson {
+    pub status: YuvTransactionStatus,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<YuvTransactionResponse>,
+}
+
+impl GetRawYuvTransactionResponseJson {
+    pub fn new(status: YuvTransactionStatus, data: Option<YuvTransactionResponse>) -> Self {
+        Self { status, data }
+    }
+}
+
+/// Hex encoded response for [`getyuvtransaction`](YuvTransactionsRpcServer::get_yuv_transaction) RPC
+/// method.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct GetRawYuvTransactionResponseHex {
+    pub status: YuvTransactionStatus,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(serialize_with = "yuv_tx_to_hex", deserialize_with = "hex_to_yuv_tx")]
+    pub data: Option<YuvTransactionResponse>,
+}
+
+impl GetRawYuvTransactionResponseHex {
+    pub fn new(status: YuvTransactionStatus, data: Option<YuvTransactionResponse>) -> Self {
+        Self { status, data }
+    }
+}
+
+pub fn yuv_tx_to_hex<S>(
+    yuv_tx: &Option<YuvTransactionResponse>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match yuv_tx {
+        Some(tx) => serializer.serialize_str(&YuvTransaction::from(tx.clone()).hex()),
+        None => serializer.serialize_none(),
+    }
+}
+
+pub fn hex_to_yuv_tx<'de, D>(deserializer: D) -> Result<Option<YuvTransactionResponse>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt_hex = Option::<String>::deserialize(deserializer)?;
+    match opt_hex {
+        Some(hex) => {
+            let tx = YuvTransaction::from_hex(hex).map_err(serde::de::Error::custom)?;
+            Ok(Some(YuvTransactionResponse::from(tx)))
+        }
+        None => Ok(None),
+    }
 }
 
 /// Response for [`emulateyuvtransaction`](YuvTransactionsRpcServer::emulate_yuv_transaction) RPC
@@ -94,59 +173,41 @@ pub struct YuvTransactionResponse {
     pub tx_type: YuvTxType,
 }
 
-/// RPC methods for transactions.
-#[cfg_attr(feature = "client", rpc(server, client))]
-#[cfg_attr(not(feature = "client"), rpc(server))]
-#[async_trait::async_trait]
-pub trait YuvTransactionsRpc {
-    /// Provide proofs to YUV transaction by id.
-    #[method(name = "provideyuvproof")]
-    async fn provide_yuv_proof(&self, yuv_tx: YuvTransaction) -> RpcResult<bool>;
+/// Request for [`provideyuvproof`] and [`providelistyuvproofs`] RPC methods that are defined for
+/// providing YUV proofs without broadcasting the Bitcoin tx.
+///
+/// [`provideyuvproof`]: YuvTransactionsRpcServer::provide_yuv_proof
+/// [`providelistyuvproofs`]: YuvTransactionsRpcServer::provide_list_yuv_proofs
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ProvideYuvProofRequest {
+    pub txid: Txid,
+    #[serde(serialize_with = "tx_type_to_hex", deserialize_with = "hex_to_tx_type")]
+    pub tx_type: YuvTxType,
+    pub blockhash: Option<BlockHash>,
+}
 
-    /// Provide YUV transactions to YUV node without submitting them on-chain.
-    #[method(name = "providelistyuvproofs")]
-    async fn provide_list_yuv_proofs(&self, yuv_txs: Vec<YuvTransaction>) -> RpcResult<bool>;
+pub fn tx_type_to_hex<S>(tx_type: &YuvTxType, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&tx_type.hex())
+}
 
-    /// Get YUV transaction by id and return its proofs.
-    #[method(name = "getrawyuvtransaction")]
-    async fn get_raw_yuv_transaction(&self, txid: Txid) -> RpcResult<GetRawYuvTransactionResponse>;
+pub fn hex_to_tx_type<'de, D>(deserializer: D) -> Result<YuvTxType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let hex = String::deserialize(deserializer)?;
+    YuvTxType::from_hex(hex).map_err(serde::de::Error::custom)
+}
 
-    /// Get list of YUV transactions by id and return its proofs. If requested transactions aren't
-    /// exist the response array will be empty.
-    #[method(name = "getlistrawyuvtransactions")]
-    async fn get_list_raw_yuv_transactions(
-        &self,
-        txids: Vec<Txid>,
-    ) -> RpcResult<Vec<YuvTransaction>>;
-
-    /// Get transaction list by page number.
-    #[method(name = "listyuvtransactions")]
-    async fn list_yuv_transactions(&self, page: u64) -> RpcResult<Vec<YuvTransactionResponse>>;
-
-    /// Send YUV transaction to Bitcoin network.
-    #[method(name = "sendrawyuvtransaction")]
-    async fn send_raw_yuv_tx(
-        &self,
-        yuv_tx: YuvTransaction,
-        max_burn_amount: Option<u64>,
-    ) -> RpcResult<bool>;
-
-    /// Check if YUV transaction is frozen or not.
-    #[method(name = "isyuvtxoutfrozen")]
-    async fn is_yuv_txout_frozen(&self, txid: Txid, vout: u32) -> RpcResult<bool>;
-
-    /// Emulate transaction check and attach without actuall broadcasting or
-    /// mining it to the network.
-    ///
-    /// This method is useful for checking if node can immidiatelly check and
-    /// attach transaction to internal storage.
-    #[method(name = "emulateyuvtransaction")]
-    async fn emulate_yuv_transaction(
-        &self,
-        yuv_tx: YuvTransaction,
-    ) -> RpcResult<EmulateYuvTransactionResponse>;
-
-    /// Get the [ChromaInfo] that contains the information about the token.
-    #[method(name = "getchromainfo")]
-    async fn get_chroma_info(&self, chroma: Chroma) -> RpcResult<Option<ChromaInfo>>;
+impl ProvideYuvProofRequest {
+    pub fn new(txid: Txid, tx_type: YuvTxType, blockhash: Option<BlockHash>) -> Self {
+        Self {
+            txid,
+            tx_type,
+            blockhash,
+        }
+    }
 }

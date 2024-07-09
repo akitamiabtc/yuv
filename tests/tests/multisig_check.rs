@@ -88,7 +88,7 @@ async fn test_create_musig_transaction() -> eyre::Result<()> {
 
     let txid = issuance.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(issuance, None).await?;
+    yuv_client.send_yuv_tx(issuance.hex(), None).await?;
 
     // Add block with issuance to the chain
     blockchain_rpc.generate_to_address(7, &issuer.address()?)?;
@@ -127,7 +127,7 @@ async fn test_create_musig_transaction() -> eyre::Result<()> {
 
     let txid = transfer.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(transfer, None).await?;
+    yuv_client.send_yuv_tx(transfer.hex(), None).await?;
 
     // Add block with transfer to the chain and sign it
     blockchain_rpc.generate_to_address(1, &alice.address()?)?;

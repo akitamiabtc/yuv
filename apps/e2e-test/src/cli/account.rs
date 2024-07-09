@@ -110,7 +110,7 @@ impl Account {
 
             let txid = tx.bitcoin_tx.txid();
             // Send the transaction.
-            let response = self.yuv_client.send_raw_yuv_tx(tx.clone(), None).await;
+            let response = self.yuv_client.send_yuv_tx(tx.hex(), None).await;
             if response.is_ok() {
                 let tx_type = tx_type(&tx.tx_type);
                 info!("{} tx sent | Txid: {}", tx_type, txid);

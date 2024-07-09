@@ -42,8 +42,6 @@ use yuv_tx_attach::GraphBuilder;
 use yuv_storage::LevelDB;
 use event_bus::EventBus;
 
-const TXS_PER_PAGE: u64 = 100;
-
 # tokio_test::block_on(async {
 let storage = LevelDB::in_memory().unwrap();
 
@@ -51,7 +49,7 @@ let mut event_bus = EventBus::default();
 event_bus.register::<GraphBuilderMessage>(Some(100));
 event_bus.register::<ControllerMessage>(Some(100));
 
-let mut graph_builder = GraphBuilder::new(storage.clone(), &event_bus, 10);
+let mut graph_builder = GraphBuilder::new(storage.clone(), &event_bus);
 # })
 ```
 

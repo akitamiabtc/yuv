@@ -6,13 +6,11 @@ pub use errors::CheckError;
 mod isolated_checks;
 pub use isolated_checks::check_transaction;
 
-mod worker;
-pub use worker::{Config, TxCheckerWorker};
-
-mod worker_pool;
-pub use worker_pool::TxCheckerWorkerPool;
+mod service;
+pub use service::TxChecker;
 
 mod announcements;
+mod script_parser;
 
 #[cfg(test)]
 mod tests;

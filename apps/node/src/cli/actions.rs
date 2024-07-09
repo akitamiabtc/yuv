@@ -36,7 +36,8 @@ pub async fn run(args: arguments::Run) -> eyre::Result<()> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env()?
-        .add_directive("hyper_util=info".parse()?);
+        .add_directive("hyper_util=info".parse()?)
+        .add_directive("hyper=info".parse()?);
 
     tracing_subscriber::registry()
         .with(YuvTracer.with_filter(filter))

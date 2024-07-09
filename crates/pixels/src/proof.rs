@@ -26,12 +26,15 @@ use bitcoin::{
 #[cfg(all(feature = "bulletproof", feature = "serde"))]
 use bulletproof::k256::elliptic_curve::sec1::FromEncodedPoint;
 
-use crate::errors::{
-    EmptyPixelProofError, LightningCommitmentProofError, LightningCommitmentWitnessParseError,
-    MultisigPixelProofError, MultisigWitnessParseError, P2WPKHWitnessParseError, PixelKeyError,
-    PixelProofError, SigPixelProofError,
-};
 use crate::script::ToLocalScript;
+use crate::{
+    errors::{
+        EmptyPixelProofError, LightningCommitmentProofError, LightningCommitmentWitnessParseError,
+        MultisigPixelProofError, MultisigWitnessParseError, P2WPKHWitnessParseError, PixelKeyError,
+        PixelProofError, SigPixelProofError,
+    },
+    ZERO_PUBLIC_KEY,
+};
 use crate::{Pixel, PixelKey};
 
 use self::htlc::{LightningHtlcData, LightningHtlcProof};
@@ -132,6 +135,14 @@ impl PixelProof {
     #[cfg(feature = "bulletproof")]
     pub fn is_bulletproof(&self) -> bool {
         matches!(self, Self::Bulletproof(_))
+    }
+
+    pub fn is_burn(&self) -> bool {
+        let PixelProof::Sig(inner) = self else {
+            return false;
+        };
+
+        inner.inner_key == ZERO_PUBLIC_KEY.inner
     }
 
     pub fn is_empty_pixelproof(&self) -> bool {
@@ -510,7 +521,7 @@ impl SigPixelProof {
             ));
         }
 
-        // TODO: verify signature.
+        // TODO(Velnbur): verify signature.
 
         Ok(())
     }
@@ -736,7 +747,7 @@ impl MultisigPixelProof {
             return Err(MultisigPixelProofError::InvalidRedeemScript);
         }
 
-        // TODO: check signatures.
+        // TODO(Velnbur): check signatures.
 
         Ok(())
     }
@@ -918,7 +929,7 @@ impl CheckableProof for LightningCommitmentProof {
             });
         }
 
-        // TODO: check signature.
+        // TODO(Velnbur): check signature.
 
         Ok(())
     }
@@ -973,7 +984,7 @@ impl LightningCommitmentProof {
 }
 
 // ===========================================================================
-//  TODO: Some utility traits, methods that should be moved somewhere
+//  TODO(Velnbur): Some utility traits, methods that should be moved somewhere
 //  in the future.
 // ==========================================================================
 

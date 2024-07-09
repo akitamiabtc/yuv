@@ -205,7 +205,11 @@ fn new_transfer_tx(pubkey: PublicKey, seckey: SecretKey, txid: Txid) -> YuvTrans
 
 /// Generate random freeze tx
 fn new_freeze_tx(pubkey: PublicKey, txid_for_freeze: Txid) -> YuvTransaction {
-    let freeze_announcement = FreezeAnnouncement::new(OutPoint::new(txid_for_freeze, 0)).into();
+    let freeze_announcement = FreezeAnnouncement::new(
+        Chroma::from(pubkey.x_only_public_key().0),
+        OutPoint::new(txid_for_freeze, 0),
+    )
+    .into();
     new_yuv_tx(
         vec![TxIn::default()],
         vec![TxOut {

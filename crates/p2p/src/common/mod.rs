@@ -4,7 +4,3 @@ pub mod collections;
 pub mod network;
 pub mod peer;
 pub mod time;
-
-pub use bitcoin;
-pub use bitcoin_hashes;
-pub use nonempty;

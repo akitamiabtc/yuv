@@ -180,7 +180,7 @@ impl LightningHtlcData {
                 .push_opcode(OP_DROP),
         };
 
-        // TODO: in future we should add support for anchors scripts here.
+        // TODO(Velnbur): in future we should add support for anchors scripts here.
 
         builder = builder
             .push_opcode(OP_CHECKSIG)

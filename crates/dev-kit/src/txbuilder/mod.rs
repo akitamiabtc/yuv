@@ -11,6 +11,7 @@ use bitcoin::{
     OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, TxOut,
 };
 use eyre::{bail, eyre, Context, OptionExt};
+
 #[cfg(feature = "bulletproof")]
 use {
     bitcoin::secp256k1::schnorr::Signature,
@@ -28,7 +29,7 @@ use bdk::{
 
 use yuv_pixels::{
     Chroma, EmptyPixelProof, MultisigPixelProof, Pixel, PixelKey, PixelProof, SigPixelProof,
-    ToEvenPublicKey,
+    ToEvenPublicKey, ZERO_PUBLIC_KEY,
 };
 
 use yuv_storage::TransactionsStorage as YuvTransactionsStorage;
@@ -140,7 +141,7 @@ struct TransactionBuilder<YuvTxsDatabase, BitcoinTxsDatabase> {
     /// Defines if the transactions is issuance or not.
     ///
     /// By that [`TransactionBuilder`] will consider to whether add or not the
-    /// inputs with YUV coins to satisfy consideration rules.
+    /// inputs with YUV coins to satisfy conservation rules.
     is_issuance: bool,
 
     /// [`Chromas`]s of current transactions.
@@ -376,6 +377,20 @@ where
             satoshis,
             amount,
             recipient: *recipient,
+        });
+
+        self.0.chromas.push(chroma);
+
+        self
+    }
+
+    /// Set the burn amount.
+    pub fn set_burn_amount(&mut self, chroma: Chroma, amount: u128, satoshis: u64) -> &mut Self {
+        self.0.outputs.push(BuilderOutput::Pixel {
+            chroma,
+            satoshis,
+            amount,
+            recipient: ZERO_PUBLIC_KEY.inner,
         });
 
         self.0.chromas.push(chroma);
@@ -967,7 +982,7 @@ where
             tx_builder.add_foreign_utxo(outpoint, psbt_input, weight)?;
         }
 
-        // Form transaction with satoshi inputs to satisfy consideration rules
+        // Form transaction with satoshi inputs to satisfy conservation rules
         // of Bitcoin.
         let (mut psbt, _details) = tx_builder.finish()?;
 

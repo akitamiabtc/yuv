@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use bitcoin::Txid;
+use bitcoin_client::json::GetBlockTxResult;
 use core::fmt::Debug;
 use event_bus::Event;
 use std::net::SocketAddr;
@@ -14,12 +15,7 @@ pub mod p2p;
 #[derive(Clone, Debug, Event)]
 pub enum ControllerMessage {
     /// Notification about invalid transactions.
-    InvalidTxs {
-        /// Transactions that were invalid.
-        tx_ids: Vec<Txid>,
-        /// Peer id of the sender.
-        sender: Option<SocketAddr>,
-    },
+    InvalidTxs(Vec<Txid>),
     /// Ask for data about transactions in P2P network.
     GetData {
         /// Ids of transactions to get.
@@ -27,8 +23,21 @@ pub enum ControllerMessage {
         /// Peer id of the sender.
         receiver: SocketAddr,
     },
+    /// Tranactions that passed the isolated check and are ready to be sent for confirmation.
+    PartiallyCheckedTxs(Vec<Txid>),
+    /// Tranactions that passed the full check and are ready to be sent to tx attacher.
+    FullyCheckedTxs(Vec<YuvTransaction>),
+    /// Share transactions with one confirmation with the P2P peers.
+    MinedTxs(Vec<Txid>),
+    /// Send confirmed transactions to the tx checker for a full check.
+    ConfirmedTxs(Vec<Txid>),
     /// Send signed transactions for on-chain confirmation.
-    ConfirmBatchTx(Vec<YuvTransaction>),
+    InitializeTxs(Vec<YuvTransaction>),
+    /// Handle a reorg.
+    Reorganization {
+        txs: Vec<Txid>,
+        new_indexing_height: usize,
+    },
     /// Remove checked announcement from handling transactions.
     CheckedAnnouncement(Txid),
     /// New inventory to share with peers.
@@ -63,15 +72,13 @@ pub enum ControllerP2PMessage {
 /// Message to TxChecker service.
 #[derive(Clone, Debug, Event)]
 pub enum TxCheckerMessage {
-    /// New transaction to check.
-    NewTxs {
-        /// New Transactions.
-        txs: Vec<YuvTransaction>,
-        /// Peer id of the sender:
-        /// * Some if transactions received from p2p network
-        /// * None if transactions received via json rpc
-        sender: Option<SocketAddr>,
-    },
+    /// New transactions to pass the full check. The transactions come along with the peer id of
+    /// the sender:
+    /// * Some if transactions received from p2p network
+    /// * None if transactions received via json rpc
+    FullCheck(Vec<(YuvTransaction, Option<SocketAddr>)>),
+    /// New transactions to pass the isolated check.
+    IsolatedCheck(Vec<YuvTransaction>),
 }
 
 /// Message to GraphBuilder service.
@@ -85,7 +92,14 @@ pub enum GraphBuilderMessage {
 #[derive(Clone, Debug, Event)]
 pub enum TxConfirmMessage {
     /// Transactions that should be confirmed before sending to the tx checker.
-    TxsToConfirm(Vec<YuvTransaction>),
+    Txs(Vec<Txid>),
     /// Transactions that are confirmed.
-    ConfirmedTxIds(Vec<Txid>),
+    Block(Box<GetBlockTxResult>),
+}
+
+/// Message to Indexer service.
+#[derive(Clone, Debug, Event)]
+pub enum IndexerMessage {
+    /// New height to index blocks from. Sent from the controller in case of reorg.
+    Reorganization(usize),
 }

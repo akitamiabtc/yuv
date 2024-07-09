@@ -1,17 +1,15 @@
 use bitcoin::Txid;
-use bitcoin_client::BitcoinRpcApi;
 use yuv_storage::{ChromaInfoStorage, FrozenTxsStorage, InvalidTxsStorage, TransactionsStorage};
 use yuv_types::announcements::{
     ChromaAnnouncement, FreezeAnnouncement, IssueAnnouncement, TransferOwnershipAnnouncement,
 };
 
-use crate::TxCheckerWorker;
+use crate::TxChecker;
 
-impl<TS, SS, BC> TxCheckerWorker<TS, SS, BC>
+impl<TS, SS> TxChecker<TS, SS>
 where
     TS: TransactionsStorage + Clone + Send + Sync + 'static,
     SS: InvalidTxsStorage + FrozenTxsStorage + ChromaInfoStorage + Clone + Send + Sync + 'static,
-    BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     /// Update chroma announcements in storage.
     pub(crate) async fn add_chroma_announcements(
@@ -55,32 +53,34 @@ where
         Ok(())
     }
 
-    /// For each freeze toggle, update entry in freeze state storage.
+    /// Set freeze entry for the given outpoint in the freeze storage.
     pub(crate) async fn update_freezes(
         &self,
         txid: Txid,
         freeze: &FreezeAnnouncement,
     ) -> eyre::Result<()> {
         let freeze_outpoint = &freeze.freeze_outpoint();
+        let freeze_entry = self.state_storage.get_frozen_tx(freeze_outpoint).await?;
+        if let Some(freeze_entry) = freeze_entry {
+            tracing::debug!(
+                txid = freeze.freeze_txid().to_string(),
+                vout = freeze.freeze_vout(),
+                "Outpoint was previously frozen in tx {:?}",
+                freeze_entry.txid
+            );
 
-        let mut freeze_entry = self
-            .state_storage
-            .get_frozen_tx(freeze_outpoint)
-            .await?
-            .unwrap_or_default();
-
-        freeze_entry.tx_ids.push(txid);
-
-        tracing::debug!(
-            "Freeze toggle for txid={} vout={} is set to {:?}",
-            freeze.freeze_txid(),
-            freeze_outpoint,
-            freeze_entry.tx_ids,
-        );
+            return Ok(());
+        }
 
         self.state_storage
-            .put_frozen_tx(freeze_outpoint, freeze_entry.tx_ids)
+            .put_frozen_tx(freeze_outpoint, txid, freeze.chroma)
             .await?;
+
+        tracing::debug!(
+            txid = freeze.freeze_txid().to_string(),
+            vout = freeze.freeze_vout(),
+            "The outpoint is frozen",
+        );
 
         Ok(())
     }

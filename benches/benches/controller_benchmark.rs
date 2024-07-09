@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bitcoin::Txid;
-use bitcoin_client::{BitcoinRpcApi, MockRpcApi};
+use bitcoin_client::MockRpcApi;
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, BatchSize, Criterion};
 use event_bus::{BusEvent, EventBus};
@@ -14,9 +14,9 @@ use tokio_util::sync::CancellationToken;
 
 use yuv_controller::Controller;
 use yuv_p2p::client::handle::MockHandle;
-use yuv_storage::{LevelDB, TxStatesStorage};
+use yuv_storage::LevelDB;
 use yuv_tx_attach::GraphBuilder;
-use yuv_tx_check::{Config, TxCheckerWorkerPool};
+use yuv_tx_check::TxChecker;
 use yuv_types::messages::p2p::Inventory;
 use yuv_types::{
     ControllerMessage, ControllerP2PMessage, GraphBuilderMessage, TxCheckerMessage,
@@ -33,7 +33,7 @@ use crate::tx_generator::TxGenerator;
 const MSG_AMOUNT: u32 = 10;
 /// Amount of transactions generated per one message
 const TXS_PER_MSG: u32 = 1;
-const SHARING_TIME_SEC: u64 = 5;
+const INV_SHARING_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_INV_SIZE: usize = 100;
 
 const DUMMY_SOCKET_ADDR: std::net::SocketAddr = std::net::SocketAddr::V4(
@@ -52,11 +52,8 @@ pub fn new_messages(
 
     for _ in 0..msg_amount {
         messages.append(&mut vec![
-            ControllerMessage::InvalidTxs {
-                tx_ids: gen_new_yuv_tx_ids(txs_per_message, generator),
-                sender: None,
-            },
-            ControllerMessage::ConfirmBatchTx(gen_new_yuv_txs(1, generator).clone()),
+            ControllerMessage::InvalidTxs(gen_new_yuv_tx_ids(txs_per_message, generator)),
+            ControllerMessage::InitializeTxs(gen_new_yuv_txs(1, generator).clone()),
             ControllerMessage::P2P(ControllerP2PMessage::Inv {
                 inv: convert_to_inventory(gen_new_yuv_tx_ids(txs_per_message, generator)),
                 sender: DUMMY_SOCKET_ADDR,
@@ -119,42 +116,27 @@ fn spawn_graph_builder(
     txs_storage: LevelDB,
     cancellation: CancellationToken,
 ) {
-    let graph_builder = GraphBuilder::new(txs_storage, event_bus, 100);
+    let graph_builder = GraphBuilder::new(txs_storage, event_bus);
 
     tokio::spawn(graph_builder.run(cancellation.clone()));
 }
 
-fn spawn_tx_checker_worker_pool<BC: BitcoinRpcApi + Send + Sync + 'static>(
-    size: usize,
+fn spawn_tx_checker(
     event_bus: &EventBus,
     txs_storage: LevelDB,
     state_storage: LevelDB,
-    bitcoin_client: Arc<BC>,
     cancellation: CancellationToken,
 ) -> eyre::Result<()> {
-    let worker_pool = TxCheckerWorkerPool::from_config(
-        size,
-        Config {
-            full_event_bus: event_bus.clone(),
-            txs_storage: txs_storage.clone(),
-            state_storage: state_storage.clone(),
-            bitcoin_client,
-        },
-    )
-    .wrap_err("TxCheckers worker pool must run successfully")?;
+    let tx_checker = TxChecker::new(event_bus.clone(), txs_storage, state_storage);
 
-    tokio::spawn(worker_pool.run(cancellation));
+    tokio::spawn(tx_checker.run(cancellation));
     Ok(())
 }
-
-#[derive(Clone)]
-struct MockedP2P;
 
 fn spawn_controller(
     event_bus: &EventBus,
     txs_storage: LevelDB,
     state_storage: LevelDB,
-    txs_states_storage: TxStatesStorage,
     cancellation: CancellationToken,
 ) {
     let mut mocked_p2p = MockHandle::new();
@@ -167,15 +149,9 @@ fn spawn_controller(
         .returning(|_, _| Ok(()));
     mocked_p2p.expect_ban_peer().times(..).returning(|_| Ok(()));
 
-    let controller = Controller::new(
-        event_bus,
-        txs_storage,
-        state_storage,
-        txs_states_storage,
-        mocked_p2p,
-    )
-    .set_inv_sharing_interval(Duration::from_secs(SHARING_TIME_SEC))
-    .set_max_inv_size(MAX_INV_SIZE);
+    let controller = Controller::new(event_bus, txs_storage, state_storage, mocked_p2p, 100)
+        .set_inv_sharing_interval(INV_SHARING_INTERVAL)
+        .set_max_inv_size(MAX_INV_SIZE);
 
     tokio::spawn(controller.run(cancellation));
 }
@@ -195,7 +171,6 @@ pub async fn tx_controller_benchmark(c: &mut Criterion) {
     let state_storage = LevelDB::in_memory()
         .wrap_err("failed to initialize storage")
         .unwrap();
-    let txs_state_storage = TxStatesStorage::default();
     let mut tx_generator = TxGenerator::default();
 
     let rpc_api = Arc::new(MockRpcApi::default());
@@ -204,23 +179,15 @@ pub async fn tx_controller_benchmark(c: &mut Criterion) {
 
     spawn_graph_builder(&event_bus, txs_storage.clone(), cancellation.clone());
 
-    spawn_tx_checker_worker_pool(
-        1000,
+    spawn_tx_checker(
         &event_bus,
         txs_storage.clone(),
         state_storage.clone(),
-        Arc::clone(&rpc_api),
         cancellation.clone(),
     )
     .expect("failed to start tx checker pool");
 
-    spawn_controller(
-        &event_bus,
-        txs_storage,
-        state_storage,
-        txs_state_storage,
-        cancellation.clone(),
-    );
+    spawn_controller(&event_bus, txs_storage, state_storage, cancellation.clone());
 
     c.bench_function("tx controller benchmark", |b| {
         b.to_async(FuturesExecutor).iter_batched(

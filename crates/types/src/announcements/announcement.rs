@@ -94,7 +94,7 @@ impl Announcement {
 impl Announcement {
     /// A wrapper to create a [`ChromaAnnouncement`] from the given arguments.
     pub fn chroma_announcement(
-        chroma: Chroma,
+        chroma: impl Into<Chroma>,
         name: String,
         symbol: String,
         decimal: u8,
@@ -102,7 +102,7 @@ impl Announcement {
         is_freezable: bool,
     ) -> Result<Self, ChromaAnnouncementParseError> {
         Ok(Self::Chroma(ChromaAnnouncement::new(
-            chroma,
+            chroma.into(),
             name,
             symbol,
             decimal,
@@ -112,13 +112,16 @@ impl Announcement {
     }
 
     /// A wrapper to create a [`TransferOwnershipAnnouncement`] from the given arguments.
-    pub fn transfer_ownership_announcement(chroma: Chroma, new_owner: ScriptBuf) -> Self {
-        Self::TransferOwnership(TransferOwnershipAnnouncement::new(chroma, new_owner))
+    pub fn transfer_ownership_announcement(
+        chroma: impl Into<Chroma>,
+        new_owner: ScriptBuf,
+    ) -> Self {
+        Self::TransferOwnership(TransferOwnershipAnnouncement::new(chroma.into(), new_owner))
     }
 
     /// A wrapper to create a [`FreezeAnnouncement`] from the given arguments.
-    pub fn freeze_announcement(outpoint: OutPoint) -> Self {
-        Self::Freeze(FreezeAnnouncement::new(outpoint))
+    pub fn freeze_announcement(chroma: impl Into<Chroma>, outpoint: OutPoint) -> Self {
+        Self::Freeze(FreezeAnnouncement::new(chroma.into(), outpoint))
     }
 }
 

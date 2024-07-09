@@ -19,13 +19,9 @@ impl ConfirmationIndexer {
     }
 
     /// Handle transactions that are waiting confirmation in the block.
-    pub async fn handle_txs_from_block(&mut self, block: &GetBlockTxResult) -> eyre::Result<()> {
-        // If transaction is appeared in the block, then it can be sent to the
-        // `TxConfirmator`.
-        let confirmed_txids = block.tx.iter().map(|tx| tx.txid()).collect::<Vec<_>>();
-
+    pub async fn handle_new_block(&mut self, block: GetBlockTxResult) -> eyre::Result<()> {
         self.event_bus
-            .send(TxConfirmMessage::ConfirmedTxIds(confirmed_txids))
+            .send(TxConfirmMessage::Block(Box::new(block)))
             .await;
 
         Ok(())
@@ -35,6 +31,6 @@ impl ConfirmationIndexer {
 #[async_trait]
 impl Subindexer for ConfirmationIndexer {
     async fn index(&mut self, block: &GetBlockTxResult) -> eyre::Result<()> {
-        self.handle_txs_from_block(block).await
+        self.handle_new_block(block.clone()).await
     }
 }

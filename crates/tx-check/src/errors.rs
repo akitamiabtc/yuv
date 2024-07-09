@@ -97,6 +97,9 @@ pub enum CheckError {
 
     #[error("Provided transaction doesn't have an announcement")]
     IssueAnnouncementNotProvided,
+
+    #[error("Trying to spend from the burn address")]
+    BurntTokensSpending,
 }
 
 /// [`TransactionChecker`](crate::TransactionChecker) errors.

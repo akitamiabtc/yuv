@@ -57,7 +57,7 @@ pub async fn run(
 
     println!("{}", tx.bitcoin_tx.txid());
 
-    yuv_client.send_raw_yuv_tx(tx, None).await?;
+    yuv_client.send_yuv_tx(tx.hex(), None).await?;
 
     Ok(())
 }

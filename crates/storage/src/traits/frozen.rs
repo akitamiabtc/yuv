@@ -3,6 +3,7 @@ use std::mem::size_of;
 use async_trait::async_trait;
 use bitcoin::{hashes::Hash, OutPoint, Txid};
 use serde_bytes::ByteArray;
+use yuv_pixels::Chroma;
 
 use crate::{KeyValueResult, KeyValueStorage};
 
@@ -28,45 +29,36 @@ fn frozen_tx_storage_key(outpoint: &OutPoint) -> ByteArray<FROZEN_TX_STORAGE_KEY
 
 #[async_trait]
 pub trait FrozenTxsStorage:
-    KeyValueStorage<ByteArray<FROZEN_TX_STORAGE_KEY_SIZE>, TxFreezesEntry>
+    KeyValueStorage<ByteArray<FROZEN_TX_STORAGE_KEY_SIZE>, TxFreezeEntry>
 {
-    async fn get_frozen_tx(&self, outpoint: &OutPoint) -> KeyValueResult<Option<TxFreezesEntry>> {
+    async fn get_frozen_tx(&self, outpoint: &OutPoint) -> KeyValueResult<Option<TxFreezeEntry>> {
         self.get(frozen_tx_storage_key(outpoint)).await
     }
 
     async fn put_frozen_tx(
         &self,
         outpoint: &OutPoint,
-        freeze_txs: Vec<Txid>,
+        freeze_tx_id: Txid,
+        chroma: Chroma,
     ) -> KeyValueResult<()> {
-        self.put(
-            frozen_tx_storage_key(outpoint),
-            TxFreezesEntry::from(freeze_txs),
-        )
-        .await
-    }
-
-    async fn delete_frozen_tx(&self, outpoint: &OutPoint) -> KeyValueResult<()> {
-        self.delete(frozen_tx_storage_key(outpoint)).await
+        let freeze_entry = TxFreezeEntry::new(freeze_tx_id, chroma);
+        self.put(frozen_tx_storage_key(outpoint), freeze_entry)
+            .await
     }
 }
 
 /// Storage entry that stores the transaction identifiers that tried to freeze the output.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
-pub struct TxFreezesEntry {
-    /// Identifiers of transaction that tried to freeze the output.
-    pub tx_ids: Vec<Txid>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct TxFreezeEntry {
+    /// Identifier of transaction that tried to freeze the output.
+    pub txid: Txid,
+
+    /// Chroma of the output to freeze.
+    pub chroma: Chroma,
 }
 
-impl From<Vec<Txid>> for TxFreezesEntry {
-    fn from(value: Vec<Txid>) -> Self {
-        Self { tx_ids: value }
-    }
-}
-
-impl TxFreezesEntry {
-    /// Check if UTXO is frozen or not based on the number of txs that tried to freeze it.
-    pub fn is_frozen(&self) -> bool {
-        self.tx_ids.len() % 2 == 1
+impl TxFreezeEntry {
+    pub fn new(txid: Txid, chroma: Chroma) -> Self {
+        Self { txid, chroma }
     }
 }

@@ -16,7 +16,9 @@ use bdk::{
 use bitcoin_client::BitcoinRpcAuth;
 use ydk::bitcoin_provider::{BitcoinProviderConfig, BitcoinRpcConfig, EsploraConfig};
 use ydk::wallet::{MemoryWallet, WalletConfig};
-use yuv_rpc_api::transactions::{GetRawYuvTransactionResponse, YuvTransactionsRpcClient};
+use yuv_rpc_api::transactions::{
+    GetRawYuvTransactionResponseHex, YuvTransactionStatus, YuvTransactionsRpcClient,
+};
 use yuv_types::YuvTransaction;
 
 /// Yuv node rpc url
@@ -82,11 +84,9 @@ pub async fn setup_wallet_from_provider(
 
 pub fn setup_blockchain(cfg: &BitcoinProviderConfig) -> Arc<AnyBlockchain> {
     match (*cfg).clone() {
-        BitcoinProviderConfig::Esplora(cfg) => Arc::new(
-            EsploraBlockchain::new(cfg.url.as_str(), cfg.stop_gap)
-                .try_into()
-                .expect("esplora blockchain should be inited"),
-        ),
+        BitcoinProviderConfig::Esplora(cfg) => {
+            Arc::new(EsploraBlockchain::new(cfg.url.as_str(), cfg.stop_gap).into())
+        }
         BitcoinProviderConfig::BitcoinRpc(cfg) => Arc::new(
             RpcBlockchain::from_config(&RpcConfig {
                 url: cfg.url,
@@ -99,8 +99,7 @@ pub fn setup_blockchain(cfg: &BitcoinProviderConfig) -> Arc<AnyBlockchain> {
                 }),
             })
             .expect("rpc blockchain should be inited")
-            .try_into()
-            .expect("rpc blockchain should be converted"),
+            .into(),
         ),
     }
 }
@@ -132,13 +131,13 @@ pub fn setup_yuv_client(node_url: &str) -> eyre::Result<HttpClient> {
 macro_rules! assert_attached {
     ($tx:expr, $msg:literal) => {
         assert!(
-            matches!($tx, yuv_rpc_api::transactions::GetRawYuvTransactionResponse::Attached(_)),
+            matches!($tx.status, yuv_rpc_api::transactions::YuvTransactionStatus::Attached),
             $msg,
         );
     };
     ($tx:expr, $msg:literal, $($options:expr),*) => {
         assert!(
-            matches!($tx, yuv_rpc_api::transactions::GetRawYuvTransactionResponse::Attached(_)),
+            matches!($tx.status, yuv_rpc_api::transactions::YuvTransactionStatus::Attached),
             $msg,
             $($options),*
         );
@@ -205,15 +204,13 @@ pub fn from_custom_auth(custom_rpc_auth: BitcoinRpcAuth) -> Auth {
 pub async fn wait_until_reject_or_attach(
     txid: Txid,
     yuv_client: &HttpClient,
-) -> eyre::Result<GetRawYuvTransactionResponse> {
-    let mut tx = yuv_client.get_raw_yuv_transaction(txid).await?;
+) -> eyre::Result<GetRawYuvTransactionResponseHex> {
+    let mut tx = yuv_client.get_yuv_transaction(txid).await?;
 
-    use GetRawYuvTransactionResponse as Response;
-
-    while matches!(tx, Response::Pending | Response::Checked) {
+    while !matches!(tx.status, YuvTransactionStatus::Attached) {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        tx = yuv_client.get_raw_yuv_transaction(txid).await?;
+        tx = yuv_client.get_yuv_transaction(txid).await?;
     }
 
     Ok(tx)

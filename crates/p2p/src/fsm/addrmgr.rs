@@ -108,21 +108,6 @@ impl<P: Store, U, C> AddressManager<P, U, C> {
     }
 }
 
-/// Address manager configuration.
-#[derive(Debug)]
-pub struct Config {
-    /// Services required from peers.
-    pub required_services: ServiceFlags,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            required_services: ServiceFlags::NONE,
-        }
-    }
-}
-
 /// Manages peer network addresses.
 #[derive(Debug)]
 pub struct AddressManager<P, U, C> {
@@ -154,11 +139,6 @@ impl<P, U, C> Iterator for AddressManager<P, U, C> {
 impl<P: Store, U: Wire<Event> + SetTimer, C: Clock> AddressManager<P, U, C> {
     pub fn initialize(&mut self) {
         self.idle();
-    }
-
-    /// Return an iterator over randomly sampled addresses.
-    pub fn iter(&mut self, services: ServiceFlags) -> impl Iterator<Item = (Address, Source)> + '_ {
-        Iter(move || self.sample(services))
     }
 
     /// Get addresses from peers.
@@ -546,10 +526,6 @@ impl<P: Store, U: Wire<Event> + SetTimer, C: Clock> AddressSource for AddressMan
             || self.peers.get(&addr).is_some()
             || self.connected.contains(&addr)
             || self.address_ranges.contains_key(&addr_key(&addr.ip()));
-    }
-
-    fn iter(&mut self, services: ServiceFlags) -> Box<dyn Iterator<Item = (Address, Source)> + '_> {
-        Box::new(AddressManager::iter(self, services))
     }
 
     fn insert(&mut self, addrs: impl IntoIterator<Item = (u32, Address)>, source: Source) {

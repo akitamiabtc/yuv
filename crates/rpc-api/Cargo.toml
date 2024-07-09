@@ -7,13 +7,17 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-client = ["jsonrpsee/http-client", "jsonrpsee/async-client"]
+client = ["jsonrpsee", "jsonrpsee/http-client", "jsonrpsee/async-client", "jsonrpsee/macros"]
+server = ["jsonrpsee", "jsonrpsee/server", "jsonrpsee/macros"]
+default = [ "full" ]
+full = [ "client", "server" ]
 
 [dependencies]
-yuv-types = { path = "../types" }
+yuv-types = { path = "../types", features = ["consensus"] }
 yuv-pixels = { path = "../pixels" }
+yuv-storage = { path = "../storage" }
 
-jsonrpsee = { workspace = true, features = ["server", "macros"] }
+jsonrpsee = { workspace = true, optional = true }
 async-trait = { workspace = true }
 bitcoin = { workspace = true }
 serde = { workspace = true }

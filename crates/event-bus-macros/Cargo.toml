@@ -1,5 +1,5 @@
 [package]
-name        = "event-bus-macros"
+name = "event-bus-macros"
 description = "Proc macro definitions for `event-bus` crate"
 version.workspace = true
 edition.workspace = true
@@ -10,9 +10,8 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
-syn   = { version = "2.0.29" }
+syn = { version = "2.0.29" }
 quote = { version = "1.0.33" }
-uuid  = { version = "1.4.1", features = ["v4"] }
 
 [dev-dependencies]
 event-bus = { path = "../event-bus" }

@@ -17,13 +17,14 @@ use bitcoin::{
 };
 use chrono::{DateTime, Utc};
 use csv::Writer;
+use eyre::bail;
 use jsonrpsee::http_client::HttpClient;
 use once_cell::sync::Lazy;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, instrument, warn, Level};
 use yuv_pixels::Chroma;
-use yuv_rpc_api::transactions::{GetRawYuvTransactionResponse, YuvTransactionsRpcClient};
+use yuv_rpc_api::transactions::{YuvTransactionStatus, YuvTransactionsRpcClient};
 use yuv_types::{ProofMap, YuvTransaction};
 
 use crate::{cli::e2e::NETWORK, config::TestConfig};
@@ -158,12 +159,12 @@ impl TxChecker {
         let (mut attached, mut pending, mut failed) = (0, 0, 0);
 
         for (txid, confirmations) in self.txs_state.clone().iter() {
-            let status = match self.yuv_client.get_raw_yuv_transaction(*txid).await {
+            let tx_response = match self.yuv_client.get_yuv_transaction(*txid).await {
                 Ok(resp) => resp,
                 Err(e) => {
                     warn!("Rate limit error: {}", e);
                     tokio::time::sleep(BITCOIN_NODE_ERROR_SLEEP_DURATION).await;
-                    self.yuv_client.get_raw_yuv_transaction(*txid).await?
+                    self.yuv_client.get_yuv_transaction(*txid).await?
                 }
             };
 
@@ -174,12 +175,15 @@ impl TxChecker {
             //
             // If it's neither attached nor invalid, just increase its number of confirmations.
             // NOTE: the tx is considered invalid if it has many confirmations and is still not attached.
-            if let GetRawYuvTransactionResponse::Attached(attached_tx) = status {
+            if tx_response.status == YuvTransactionStatus::Attached {
+                let Some(attached_tx) = tx_response.data else {
+                    bail!("Tx {:?} is missing in the storage", txid);
+                };
                 info!("Tx {} is attached", txid);
                 attached += 1;
                 self.txs_state.remove(txid);
 
-                self.update_amount(attached_tx)?;
+                self.update_amount(attached_tx.into())?;
             } else if *confirmations > 2 {
                 failed += 1;
                 error!("Tx {} is invalid", txid);

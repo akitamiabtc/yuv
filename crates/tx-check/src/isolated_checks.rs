@@ -1,7 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
-use bitcoin::{self, key::Secp256k1, secp256k1::All, Transaction, TxIn, TxOut, Txid, Witness};
-use bitcoin_client::BitcoinRpcApi;
+use bitcoin::{
+    self, key::Secp256k1, secp256k1::All, AddressType, ScriptBuf, Transaction, TxIn, TxOut, Witness,
+};
 
 #[cfg(feature = "bulletproof")]
 use {
@@ -22,7 +23,7 @@ use yuv_pixels::{
 use yuv_types::{announcements::ChromaInfo, AnyAnnouncement, ProofMap};
 use yuv_types::{announcements::IssueAnnouncement, YuvTransaction, YuvTxType};
 
-use crate::errors::CheckError;
+use crate::{errors::CheckError, script_parser::SpendingCondition};
 
 /// Checks transactions' correctness in terms of conservation rules and provided proofs.
 pub fn check_transaction(yuv_tx: &YuvTransaction) -> Result<(), CheckError> {
@@ -131,6 +132,10 @@ pub(crate) fn check_transfer_isolated(
         statement: txin,
     } in gathered_inputs.iter()
     {
+        if inner.is_burn() {
+            return Err(CheckError::BurntTokensSpending);
+        }
+
         inner
             .checked_check_by_input(txin)
             .map_err(|error| CheckError::InvalidProof {
@@ -287,54 +292,32 @@ fn check_same_chroma_proofs(
 }
 
 /// Find owner of the `Chroma` in the inputs.
-pub(crate) async fn find_owner_in_txinputs<'a, BC: BitcoinRpcApi + Send + Sync + 'static>(
-    bitcoin_client: Arc<BC>,
+pub(crate) fn find_owner_in_txinputs<'a>(
     inputs: &'a [TxIn],
     chroma: &Chroma,
     chroma_info: Option<ChromaInfo>,
 ) -> eyre::Result<Option<&'a TxIn>> {
     let owner_script_opt = chroma_info.and_then(|chroma_info| chroma_info.owner);
     let ctx = Secp256k1::new();
-    // A small optimization that prevents fetching the same tx multiple times. The optimization
-    // works in case several inputs are UTXOS from the same Bitcoin transaction.
-    let mut fetched_inputs: HashMap<Txid, Transaction> = HashMap::new();
+
     for input in inputs {
-        let previous_output = input.previous_output;
-
-        // Check if the tx was previously fetched.
-        let parent_tx_opt = fetched_inputs.get(&previous_output.txid).cloned();
-        let parent_tx_opt = match parent_tx_opt {
-            // Return it if it was previously fetched.
-            Some(tx) => Some(tx),
-            // Try fetching it via Bitcoin RPC otherwise.
-            None => Some(
-                bitcoin_client
-                    .get_raw_transaction(&previous_output.txid, None)
-                    .await?,
-            ),
-        };
-
-        // Skip if the parent tx was not found.
-        let Some(parent_tx) = parent_tx_opt else {
-            continue;
-        };
-
-        // Insert the fetched tx in the hash map to use it in the next iterations.
-        fetched_inputs.insert(previous_output.txid, parent_tx.clone());
-
-        let Some(previous_output) = parent_tx.output.get(input.previous_output.vout as usize)
-        else {
-            continue;
-        };
-
-        if let Some(owner_script) = &owner_script_opt {
-            if *owner_script == previous_output.script_pubkey {
+        // If there is no owner info provided, then it's supposed that the issuer is still
+        // the owner of the `Chroma` and has a P2WPKH address.
+        let Some(owner_script) = &owner_script_opt else {
+            // Handle P2WPKH owner input and check if it spends tweaked satoshis.
+            if handle_p2wpkh_input(&ctx, &input.witness, chroma) {
                 return Ok(Some(input));
             }
-            continue;
-        }
 
-        if handle_p2wpkh_input(&ctx, &input.witness, chroma) {
+            continue;
+        };
+
+        // Extract scriptPubKey from the witness or scriptSig depending on the transaction type.
+        let spending_condition =
+            SpendingCondition::from_txin(input, script_to_address_type(owner_script))?;
+
+        // Compare the extracted script with the owner script.
+        if spending_condition.into_script() == *owner_script {
             return Ok(Some(input));
         }
     }
@@ -357,6 +340,20 @@ fn handle_p2wpkh_input(ctx: &Secp256k1<All>, witness: &Witness, chroma: &Chroma)
         .x_only_public_key();
 
     &xonly_public_key == chroma.xonly() || xonly_public_key == pixel_pubkey
+}
+
+fn script_to_address_type(script: &ScriptBuf) -> AddressType {
+    if script.is_p2pkh() {
+        AddressType::P2pkh
+    } else if script.is_p2sh() {
+        AddressType::P2sh
+    } else if script.is_v0_p2wpkh() {
+        AddressType::P2wpkh
+    } else if script.is_v0_p2wsh() {
+        AddressType::P2wsh
+    } else {
+        AddressType::P2tr
+    }
 }
 
 #[cfg(feature = "bulletproof")]

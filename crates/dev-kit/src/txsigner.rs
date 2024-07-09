@@ -12,7 +12,6 @@ use bitcoin::{
     PrivateKey, ScriptBuf,
 };
 use eyre::bail;
-use std::cmp::Ordering;
 use yuv_pixels::{
     LightningCommitmentProof, LightningCommitmentWitness, MultisigPixelProof, MultisigWintessData,
     P2WPKHWitnessData, Pixel, PixelPrivateKey, PixelProof,
@@ -89,25 +88,33 @@ impl TransactionSigner {
         // clean partial sigs for this input
         psbt.inputs[index as usize].partial_sigs.clear();
 
-        let mut secret_keys = multisig_proof
+        let mut key_pairs = multisig_proof
             .inner_keys
             .iter()
-            .filter_map(|key| self.signers.get(&XOnlyPublicKey::from(*key)).cloned())
+            .filter_map(|key| {
+                self.signers
+                    .get(&XOnlyPublicKey::from(*key))
+                    .cloned()
+                    .map(|secret| (secret, *key))
+            })
             .collect::<Vec<_>>();
 
-        if secret_keys.len() < multisig_proof.m as usize {
+        if key_pairs.len() < multisig_proof.m as usize {
             bail!(
                 "Not enough signers for multisig pixel: {} < {}",
-                secret_keys.len(),
+                key_pairs.len(),
                 multisig_proof.m
             );
         }
 
-        secret_keys.sort_by(|a, b| {
-            a.secret_bytes()
-                .partial_cmp(&b.secret_bytes())
-                .unwrap_or(Ordering::Equal)
+        key_pairs.sort_by(|(_, a_pubkey), (_, b_pubkey)| {
+            a_pubkey.serialize().cmp(&b_pubkey.serialize())
         });
+
+        let mut secret_keys: Vec<_> = key_pairs
+            .into_iter()
+            .map(|(secret_key, _)| secret_key)
+            .collect();
 
         // Replace first with one tweaked by pixel to satisfy protocol rules.
         if let Some(first_key) = secret_keys.first_mut() {

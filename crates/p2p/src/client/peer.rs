@@ -42,8 +42,4 @@ impl Store for Cache {
     fn len(&self) -> usize {
         self.0.len()
     }
-
-    fn clear(&mut self) {
-        self.0.clear()
-    }
 }

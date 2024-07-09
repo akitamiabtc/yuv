@@ -5,6 +5,7 @@ use bitcoin::address::{Payload, WitnessProgram, WitnessVersion};
 use bitcoin::secp256k1::constants::SCHNORR_PUBLIC_KEY_SIZE;
 use bitcoin::secp256k1::Parity;
 use bitcoin::{key::XOnlyPublicKey, secp256k1, Address, Network, PublicKey};
+use once_cell::sync::Lazy;
 
 use crate::errors::{ChromaParseError, LumaParseError, PixelParseError};
 
@@ -21,7 +22,10 @@ pub const CHROMA_SIZE: usize = 32;
 /// Result size of serialized [`Pixel`].
 pub const PIXEL_SIZE: usize = LUMA_SIZE + CHROMA_SIZE;
 
-const ZERO_PUBKEY_BYTES: &[u8] = &[0x02; 33];
+pub const ZERO_PUBKEY_BYTES: &[u8] = &[0x02; 33];
+
+pub static ZERO_PUBLIC_KEY: Lazy<PublicKey> =
+    Lazy::new(|| PublicKey::from_slice(ZERO_PUBKEY_BYTES).expect("Pubkey should be valid"));
 
 /// Represents amount of tokens in the [`Pixel`].
 ///
@@ -80,7 +84,7 @@ impl Luma {
     }
 
     pub fn from_array(bytes: [u8; LUMA_SIZE]) -> Self {
-        // TODO: check if we want big-endian, or little-endian.
+        // TODO(Velnbur): check if we want big-endian, or little-endian.
         let amount = u128::from_be_bytes(
             bytes[0..AMOUNT_SIZE]
                 .try_into()
@@ -100,7 +104,7 @@ impl Luma {
     pub fn to_bytes(&self) -> [u8; LUMA_SIZE] {
         let mut buf: [u8; LUMA_SIZE] = [0u8; LUMA_SIZE];
 
-        // TODO: check if want to use big-endian or little-endian.
+        // TODO(Velnbur): check if want to use big-endian or little-endian.
         buf[..AMOUNT_SIZE].copy_from_slice(&self.amount.to_be_bytes());
         buf[AMOUNT_SIZE..].copy_from_slice(&self.blinding_factor);
 
@@ -164,7 +168,8 @@ impl Chroma {
     }
 
     pub fn from_address(address: &str) -> Result<Self, ChromaParseError> {
-        let address = Address::from_str(address).unwrap();
+        let address =
+            Address::from_str(address).map_err(|_| ChromaParseError::InvalidAddressType)?;
 
         let (version, program) = match &address.payload {
             Payload::WitnessProgram(program) => (program.version(), program.program()),
@@ -243,11 +248,9 @@ impl Pixel {
     }
 
     pub fn empty() -> Self {
-        let zero_pubkey = PublicKey::from_slice(ZERO_PUBKEY_BYTES).expect("Pubkey should be valid");
-
         Self {
             luma: 0.into(),
-            chroma: zero_pubkey.into(),
+            chroma: Chroma::from(*ZERO_PUBLIC_KEY),
         }
     }
 

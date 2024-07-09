@@ -31,7 +31,7 @@ pub type PeerId = net::SocketAddr;
 /// Peer-to-peer protocol version.
 pub const PROTOCOL_VERSION: u32 = 100000;
 /// User agent included in `version` messages.
-pub const USER_AGENT: &str = "/yuv/0.1.0/";
+pub const USER_AGENT: &str = concat!("/yuv:", env!("CARGO_PKG_VERSION"), "/");
 
 /// Configured limits.
 #[derive(Debug, Clone)]
@@ -446,13 +446,7 @@ impl<P: peer::Store + Send, C: AdjustedClock<PeerId> + Sync + Send> crate::net::
                     self.addrmgr.peer_negotiated(&addr, peer.services);
                     self.pingmgr.peer_negotiated(conn.socket.addr);
 
-                    self.invmgr.peer_negotiated(
-                        conn.socket,
-                        peer.services,
-                        peer.relay,
-                        peer.wtxidrelay,
-                        peer.ytxidrelay,
-                    );
+                    self.invmgr.peer_negotiated(conn.socket);
                 }
             }
             NetworkMessage::WtxidRelay => {

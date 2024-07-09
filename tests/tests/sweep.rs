@@ -66,7 +66,7 @@ async fn test_sweep() -> eyre::Result<()> {
 
     let txid = issuance.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(issuance, None).await?;
+    yuv_client.send_yuv_tx(issuance.hex(), None).await?;
 
     rpc_blockchain.generate_to_address(7, &alice.address()?)?;
 

@@ -3,7 +3,7 @@ extern crate criterion;
 
 use std::sync::Arc;
 
-use bitcoin_client::{BitcoinRpcApi, MockRpcApi};
+use bitcoin_client::MockRpcApi;
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, BatchSize, Criterion};
 use event_bus::{BusEvent, EventBus};
@@ -11,7 +11,7 @@ use eyre::WrapErr;
 use tokio_util::sync::CancellationToken;
 
 use yuv_storage::LevelDB;
-use yuv_tx_check::{Config, TxCheckerWorkerPool};
+use yuv_tx_check::TxChecker;
 use yuv_types::{ControllerMessage, GraphBuilderMessage, TxCheckerMessage};
 
 use crate::tx_generator::TxGenerator;
@@ -39,41 +39,27 @@ fn new_messages(
         for _ in 0..txs_per_message {
             let yuv_tx = generator.get_next_yuv_tx();
 
-            yuv_txs.push(yuv_tx.clone());
+            yuv_txs.push((yuv_tx.clone(), None));
 
             rpc_api
                 .expect_get_raw_transaction()
                 .returning(move |_, _| Ok(yuv_tx.clone().bitcoin_tx));
         }
-        messages.push(TxCheckerMessage::NewTxs {
-            txs: yuv_txs,
-            sender: None,
-        })
+        messages.push(TxCheckerMessage::FullCheck(yuv_txs))
     }
 
     messages
 }
 
-async fn spawn_tx_checker_worker_pool<BC: BitcoinRpcApi + Send + Sync + 'static>(
-    size: usize,
+async fn spawn_tx_checker(
     event_bus: &EventBus,
     txs_storage: LevelDB,
     state_storage: LevelDB,
-    bitcoin_client: Arc<BC>,
     cancellation: CancellationToken,
 ) -> eyre::Result<()> {
-    let worker_pool = TxCheckerWorkerPool::from_config(
-        size,
-        Config {
-            full_event_bus: event_bus.clone(),
-            txs_storage: txs_storage.clone(),
-            state_storage: state_storage.clone(),
-            bitcoin_client,
-        },
-    )
-    .wrap_err("TxCheckers worker pool must run successfully")?;
+    let tx_checker = TxChecker::new(event_bus.clone(), txs_storage, state_storage);
 
-    tokio::spawn(worker_pool.run(cancellation));
+    tokio::spawn(tx_checker.run(cancellation));
     Ok(())
 }
 
@@ -108,12 +94,10 @@ async fn tx_check_benchmark(c: &mut Criterion) {
 
     let cancellation = CancellationToken::new();
 
-    spawn_tx_checker_worker_pool(
-        1000,
+    spawn_tx_checker(
         &event_bus,
         txs_storage.clone(),
         state_storage.clone(),
-        Arc::clone(&rpc_api),
         cancellation,
     )
     .await

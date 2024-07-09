@@ -89,7 +89,7 @@ async fn test_cli_flow() -> eyre::Result<()> {
 
     let usd_txid = usd_issuance.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(usd_issuance, None).await?;
+    yuv_client.send_yuv_tx(usd_issuance.hex(), None).await?;
 
     // Add block with issuance to the chain
     rpc_blockchain.generate_to_address(7, &alice.address()?)?;
@@ -120,7 +120,7 @@ async fn test_cli_flow() -> eyre::Result<()> {
 
     let eur_txid = eur_issuance.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(eur_issuance, None).await?;
+    yuv_client.send_yuv_tx(eur_issuance.hex(), None).await?;
 
     // Add block with issuance to the chain
     rpc_blockchain.generate_to_address(7, &alice.address()?)?;
@@ -161,7 +161,9 @@ async fn test_cli_flow() -> eyre::Result<()> {
 
     let txid = alice_bob_transfer.bitcoin_tx.txid();
 
-    yuv_client.send_raw_yuv_tx(alice_bob_transfer, None).await?;
+    yuv_client
+        .send_yuv_tx(alice_bob_transfer.hex(), None)
+        .await?;
 
     // Add block with transfer to the chain
     rpc_blockchain.generate_to_address(7, &alice.address()?)?;

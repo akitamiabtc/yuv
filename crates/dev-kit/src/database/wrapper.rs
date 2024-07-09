@@ -20,7 +20,7 @@ where
     }
 }
 
-/// NOTE: We assume here that database is created once by us, and then,
+/// NOTE(Velnbur): We assume here that database is created once by us, and then,
 /// even if implementation is using [`RefCell`] inside it, [`Arc`] and
 /// [`RwLock`] should prevent any unsafe operations.
 ///

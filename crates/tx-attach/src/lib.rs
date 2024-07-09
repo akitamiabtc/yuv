@@ -43,9 +43,6 @@ pub struct GraphBuilder<TransactionStorage> {
     /// Period of time, after which we consider transaction _too old_
     /// or _outdated_.
     tx_outdated_duration: Duration,
-
-    /// Amount of transactions that fit one page.
-    tx_per_page: u64,
 }
 
 const DURATION_ONE_HOUR: Duration = Duration::from_secs(60 * 60);
@@ -55,7 +52,7 @@ impl<TS> GraphBuilder<TS>
 where
     TS: TransactionsStorage + PagesStorage + Send + Sync + 'static,
 {
-    pub fn new(tx_storage: TS, full_event_bus: &EventBus, tx_per_page: u64) -> Self {
+    pub fn new(tx_storage: TS, full_event_bus: &EventBus) -> Self {
         let event_bus = full_event_bus
             .extract(&typeid![ControllerMessage], &typeid![GraphBuilderMessage])
             .expect("event channels must be presented");
@@ -66,7 +63,6 @@ where
             inverse_deps: Default::default(),
             deps: Default::default(),
             stored_txs: Default::default(),
-            tx_per_page,
             cleanup_period: DURATION_ONE_HOUR,
             tx_outdated_duration: DURATION_ONE_DAY,
         }
@@ -215,8 +211,7 @@ where
             match &yuv_tx.tx_type {
                 // if issuance is attached, there is no reason to wait for it's parents.
                 YuvTxType::Issue { .. } => {
-                    self.set_tx_attached(yuv_tx.clone(), &mut attached_txs)
-                        .await?;
+                    attached_txs.push(yuv_tx.bitcoin_tx.txid());
 
                     let Some(ids) = self.inverse_deps.remove(&child_id) else {
                         continue;
@@ -247,7 +242,7 @@ where
 
             for txid in queued_txs {
                 // Find deps of current node that are attached:
-                let is_empty = self.remove_attached_parents(txid).await?;
+                let is_empty = self.remove_attached_parents(txid, &attached_txs).await?;
 
                 // If we still dependent on some transactions, then we can't attach this tx.
                 if !is_empty {
@@ -266,7 +261,7 @@ where
                 self.deps.remove(&txid);
 
                 // Add tx to attached storage:
-                self.set_tx_attached(tx, &mut attached_txs).await?;
+                attached_txs.push(tx.bitcoin_tx.txid());
 
                 // Add transactions that depends on this transaction to the queue,
                 // so we can remove their deps on next iteration:
@@ -292,14 +287,6 @@ where
             return Ok(());
         }
 
-        // Handle that number of transactions in batch could be more than
-        // a number of transactions in page.
-        for txs in attached_txs.chunks(self.tx_per_page as usize) {
-            self.put_txs_ids_to_page(txs)
-                .await
-                .wrap_err("Failed to store transactions in pages")?;
-        }
-
         self.event_bus
             .send(ControllerMessage::AttachedTxs(attached_txs))
             .await;
@@ -307,51 +294,13 @@ where
         Ok(())
     }
 
-    /// Put attached transactions ids to page storage.
-    async fn put_txs_ids_to_page(&self, txids: &[Txid]) -> eyre::Result<()> {
-        let last_page_num = self
-            .tx_storage
-            .get_pages_number()
-            .await?
-            .unwrap_or_default();
-
-        let mut last_page = self
-            .tx_storage
-            .get_page_by_num(last_page_num)
-            .await?
-            .unwrap_or_default();
-
-        // Get space that is left in current page
-        let left_space = self.tx_per_page.saturating_sub(last_page.len() as u64);
-
-        // And split attached txs into two arrays, where the first ones will
-        // be stored to current page, and other in next.
-        let (in_current_page, in_next_page) = split_at(txids, left_space as usize);
-
-        // If there is some left space to store in current page, store it:
-        if !in_current_page.is_empty() {
-            last_page.extend(in_current_page);
-
-            self.tx_storage.put_page(last_page_num, last_page).await?;
-        }
-
-        // If there is some, store them in next page, and increment the page number.
-        if !in_next_page.is_empty() {
-            let next_page_num = last_page_num + 1;
-
-            self.tx_storage
-                .put_page(next_page_num, in_next_page.to_vec())
-                .await?;
-
-            self.tx_storage.put_pages_number(next_page_num).await?;
-        }
-
-        Ok(())
-    }
-
     /// Removes attached parents from dependencies of the transaction, returns
     /// `true` if there is no deps left.
-    async fn remove_attached_parents(&mut self, txid: Txid) -> eyre::Result<bool> {
+    async fn remove_attached_parents(
+        &mut self,
+        txid: Txid,
+        attached_txs: &[Txid],
+    ) -> eyre::Result<bool> {
         let Some(txids) = self.deps.get_mut(&txid) else {
             return Ok(true);
         };
@@ -361,7 +310,8 @@ where
         // TODO: this could be done in batch with array of futures, but
         // it's not critical for now.
         for txid in txids.iter() {
-            let is_attached = self.tx_storage.get_yuv_tx(txid).await?.is_some();
+            let is_attached =
+                attached_txs.contains(txid) || self.tx_storage.get_yuv_tx(txid).await?.is_some();
 
             if is_attached {
                 ids_to_remove.push(*txid);
@@ -396,7 +346,8 @@ where
 
             let parent_txid = parent.previous_output.txid;
 
-            let is_attached = self.tx_storage.get_yuv_tx(&parent_txid).await?.is_some();
+            let is_attached = attached_txs.contains(&parent_txid)
+                || self.tx_storage.get_yuv_tx(&parent_txid).await?.is_some();
 
             if !is_attached {
                 // If there is no parent transaction in the storage, then
@@ -415,7 +366,7 @@ where
 
         if all_parents_attached {
             // If all parents are attached, then we can attach this transaction.
-            self.set_tx_attached(yuv_tx.clone(), attached_txs).await?;
+            attached_txs.push(yuv_tx.bitcoin_tx.txid());
 
             self.deps.remove(&child_id);
 
@@ -436,29 +387,6 @@ where
 
         Ok(())
     }
-
-    /// Add transaction to storage and send it to message handler to update an actual inventory
-    async fn set_tx_attached(
-        &mut self,
-        tx: YuvTransaction,
-        attached_txs: &mut Vec<Txid>,
-    ) -> eyre::Result<()> {
-        let txid = tx.bitcoin_tx.txid();
-
-        self.tx_storage.put_yuv_tx(tx.clone()).await?;
-
-        tracing::info!("Tx {txid} is attached");
-
-        // Add to inventory only if it's not a freeze transaction.
-        attached_txs.push(txid);
-
-        Ok(())
-    }
-}
-
-/// Split at array without panic
-fn split_at<T>(txids: &[T], left_space: usize) -> (&[T], &[T]) {
-    txids.split_at(left_space.min(txids.len()))
 }
 
 #[cfg(test)]
@@ -470,8 +398,11 @@ mod tests {
         Sequence, Transaction, Witness,
     };
     use once_cell::sync::Lazy;
+    use yuv_controller::Controller;
+    use yuv_p2p::client::handle::MockHandle;
     use yuv_pixels::{Pixel, PixelProof, SigPixelProof};
-    use yuv_storage::LevelDB;
+    use yuv_storage::{LevelDB, MempoolEntryStorage, MempoolStatus, MempoolTxEntry};
+    use yuv_types::{IndexerMessage, TxCheckerMessage, TxConfirmMessage};
 
     use super::*;
 
@@ -484,17 +415,35 @@ mod tests {
         PixelProof::Sig(SigPixelProof::new(Pixel::new(10, key), key.inner))
     });
 
-    const TX_PER_PAGE: u64 = 100;
-
     #[tokio::test]
     async fn test_example_from_doc() {
         let storage = LevelDB::in_memory().unwrap();
 
         let mut event_bus = EventBus::default();
+        // Register all the messages for the controller to work
+        event_bus.register::<TxCheckerMessage>(Some(100));
         event_bus.register::<GraphBuilderMessage>(Some(100));
         event_bus.register::<ControllerMessage>(Some(100));
+        event_bus.register::<TxConfirmMessage>(Some(100));
+        event_bus.register::<IndexerMessage>(Some(100));
 
-        let mut graph_builder = GraphBuilder::<_>::new(storage.clone(), &event_bus, TX_PER_PAGE);
+        let mut mocked_p2p = MockHandle::new();
+        // Just expect all messages to be sent successfully
+        mocked_p2p.expect_send_inv().times(..).returning(|_| Ok(()));
+        mocked_p2p
+            .expect_send_get_data()
+            .times(..)
+            .returning(|_, _| Ok(()));
+        mocked_p2p.expect_ban_peer().times(..).returning(|_| Ok(()));
+        let mut controller = Controller::new(
+            &event_bus,
+            storage.clone(),
+            storage.clone(),
+            mocked_p2p,
+            100,
+        );
+
+        let mut graph_builder = GraphBuilder::<_>::new(storage.clone(), &event_bus);
 
         let tx1 = YuvTransaction {
             bitcoin_tx: Transaction {
@@ -656,12 +605,36 @@ mod tests {
         graph_builder.attach_txs(&txs).await.unwrap();
 
         for tx in &txs {
+            storage
+                .put_mempool_entry(MempoolTxEntry::new(
+                    tx.clone(),
+                    MempoolStatus::Attaching,
+                    None,
+                ))
+                .await
+                .unwrap();
+        }
+
+        let events = event_bus.subscribe::<ControllerMessage>();
+        tokio::select! {
+            event = events.recv() => {
+                let ControllerMessage::AttachedTxs(attached_txs) = event.unwrap() else {
+                    panic!("Message should be present");
+                };
+                controller.handle_attached_txs(attached_txs).await.unwrap();
+            }
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                panic!("No attached txs arrived");
+            }
+        }
+
+        for tx in &txs {
             let got_tx = storage.get_yuv_tx(&tx.bitcoin_tx.txid()).await.unwrap();
 
             assert_eq!(
                 got_tx,
                 Some(tx.clone()),
-                "Transaction {} must be attcahed",
+                "Transaction {} must be attached",
                 tx.bitcoin_tx.txid()
             );
         }
@@ -695,7 +668,7 @@ mod tests {
         event_bus.register::<GraphBuilderMessage>(Some(100));
         event_bus.register::<ControllerMessage>(Some(100));
 
-        let graph_builder = GraphBuilder::new(storage.clone(), &event_bus, TX_PER_PAGE);
+        let graph_builder = GraphBuilder::new(storage.clone(), &event_bus);
 
         let mut graph_builder = graph_builder
             .with_cleanup_period(Duration::from_secs(0))

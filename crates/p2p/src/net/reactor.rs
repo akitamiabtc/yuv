@@ -69,11 +69,9 @@ pub struct Reactor<R: Write + Read, Id: PeerId = net::SocketAddr> {
 impl<R: Write + Read + AsRawFd, Id: PeerId> Reactor<R, Id> {
     /// Register a peer with the reactor.
     fn register_peer(&mut self, addr: Id, stream: R, link: Link) {
-        let socket_addr = addr.to_socket_addr();
         self.sources
             .register(Source::Peer(addr.clone()), &stream, popol::interest::ALL);
-        self.peers
-            .insert(addr, Socket::from(stream, socket_addr, link));
+        self.peers.insert(addr, Socket::from(stream, link));
     }
 
     /// Unregister a peer from the reactor.

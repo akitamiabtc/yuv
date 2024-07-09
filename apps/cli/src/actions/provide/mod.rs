@@ -1,11 +1,10 @@
-use bdk::blockchain::GetTx;
 use bitcoin::Txid;
 use clap::Args;
 use color_eyre::eyre::{self, bail, Context as EyreContext};
 use ydk::bitcoin_provider::BitcoinProvider;
 use ydk::txbuilder::form_issue_announcement;
 use yuv_rpc_api::transactions::YuvTransactionsRpcClient;
-use yuv_types::{TransferProofs, YuvTransaction, YuvTxType};
+use yuv_types::{TransferProofs, YuvTxType};
 
 use crate::actions::proof::ProofListArgs;
 use crate::context::Context;
@@ -44,13 +43,6 @@ pub(crate) async fn run(
         );
     }
 
-    let Some(bitcoin_tx) = bitcoin_provider.blockchain().get_tx(&txid)? else {
-        bail!(
-            "Transaction is not found in the Bitcoin network at txid: {}",
-            txid
-        );
-    };
-
     let TransferProofs { input, output } = proofs.into_proof_maps()?;
 
     let tx_type = if input.is_empty() {
@@ -67,15 +59,10 @@ pub(crate) async fn run(
         }
     };
 
-    let tx = YuvTransaction {
-        bitcoin_tx,
-        tx_type,
-    };
-
     let yuv_client = context.yuv_client()?;
 
     yuv_client
-        .provide_yuv_proof(tx)
+        .provide_yuv_proof_short(txid, tx_type.hex(), None)
         .await
         .wrap_err("Failed to provide rpoof to node")?;
 

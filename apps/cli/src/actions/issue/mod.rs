@@ -73,16 +73,16 @@ pub async fn run(
         builder.finish(&blockchain).await?
     };
 
-    let tx_type = tx.tx_type.clone();
-    blockchain.broadcast(&tx.bitcoin_tx)?;
-    if !do_not_provide_proofs {
+    if do_not_provide_proofs {
+        blockchain.broadcast(&tx.bitcoin_tx)?;
+    } else {
         let client = ctx.yuv_client()?;
 
-        client.provide_yuv_proof(tx.clone()).await?;
+        client.send_yuv_tx(tx.hex(), None).await?;
     }
 
     println!("tx id: {}", tx.bitcoin_tx.txid());
-    println!("{}", serde_yaml::to_string(&tx_type)?);
+    println!("tx hex: {}", tx.hex());
 
     Ok(())
 }

@@ -32,7 +32,7 @@ pub fn run(
 
     let (xonly, _parity) = even_pubkey.inner.x_only_public_key();
 
-    // NOTE: The only way I found to add public key to taproot without
+    // NOTE(Velnbur): The only way I found to add public key to taproot without
     // tweaking the key with hash of the merkle root:
     let p2tr = Address::new(
         network,
