@@ -2,7 +2,7 @@ use bitcoin::{secp256k1::PublicKey, ScriptBuf, TxIn, TxOut};
 
 use crate::{CheckableProof, Pixel, PixelKey};
 
-use self::{
+pub use self::{
     errors::LightningCommitmentProofError,
     script::{LightningCommitmentProofData, ToLocalScript},
     witness::LightningCommitmentWitness,
@@ -100,3 +100,5 @@ impl LightningCommitmentProof {
         Ok(ScriptBuf::from(&redeem_script).to_v0_p2wsh())
     }
 }
+
+
