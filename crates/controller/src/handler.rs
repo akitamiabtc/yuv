@@ -183,10 +183,6 @@ where
                 .handle_confirmed_txs(txids)
                 .await
                 .wrap_err("failed to handle confirmed transactions")?,
-            Message::CheckedAnnouncement(txid) => self
-                .handle_checked_announcement(txid)
-                .await
-                .wrap_err("failed to handle checked announcements")?,
             Message::Reorganization {
                 txs,
                 new_indexing_height,
@@ -237,7 +233,8 @@ where
             };
 
             match mempool_entry.status {
-                MempoolStatus::Initialized => {
+                #[allow(deprecated)]
+                MempoolStatus::Initialized | MempoolStatus::Pending => {
                     self.event_bus
                         .send(TxCheckerMessage::IsolatedCheck(vec![mempool_entry.yuv_tx]))
                         .await
@@ -498,7 +495,20 @@ where
     /// Handles YUV transactions that passed the full check and changes their statuses from
     /// `Mined` to `Attaching`, then sends them to the graph builder.
     pub async fn handle_fully_checked_txs(&mut self, yuv_txs: Vec<YuvTransaction>) -> Result<()> {
-        for yuv_tx in &yuv_txs {
+        let mut non_announcement_txs = Vec::new();
+        let mut announcement_txs = Vec::new();
+
+        for yuv_tx in yuv_txs {
+            tracing::debug!(
+                txid = yuv_tx.bitcoin_tx.txid().to_string(),
+                "Tx has passed the full check and is waiting to be attached"
+            );
+
+            if matches!(yuv_tx.tx_type, YuvTxType::Announcement(_)) {
+                announcement_txs.push(yuv_tx);
+                continue;
+            }
+
             let mut mempool_entry = self
                 .state_storage
                 .get_mempool_entry(&yuv_tx.bitcoin_tx.txid())
@@ -506,16 +516,18 @@ where
                 .wrap_err("Confirmed tx is not present in the mempool")?;
             mempool_entry.status = MempoolStatus::Attaching;
             self.state_storage.put_mempool_entry(mempool_entry).await?;
-
-            tracing::debug!(
-                txid = yuv_tx.bitcoin_tx.txid().to_string(),
-                "Tx has passed the full check and is waiting to be attached"
-            );
+            non_announcement_txs.push(yuv_tx);
         }
 
-        self.event_bus
-            .send(GraphBuilderMessage::CheckedTxs(yuv_txs))
-            .await;
+        if !announcement_txs.is_empty() {
+            self.handle_checked_announcements(announcement_txs).await?;
+        }
+
+        if !non_announcement_txs.is_empty() {
+            self.event_bus
+                .send(GraphBuilderMessage::CheckedTxs(non_announcement_txs))
+                .await;
+        }
 
         Ok(())
     }
@@ -687,19 +699,37 @@ where
     }
 
     /// Handles checked announcement. It removes it from the mempool.
-    pub async fn handle_checked_announcement(&mut self, announcement_txid: Txid) -> Result<()> {
-        self.state_storage
-            .delete_mempool_entry(&announcement_txid)
-            .await?;
+    pub async fn handle_checked_announcements(
+        &mut self,
+        announcement_txs: Vec<YuvTransaction>,
+    ) -> Result<()> {
+        let txids: Vec<Txid> = announcement_txs
+            .iter()
+            .map(|tx| tx.bitcoin_tx.txid())
+            .collect();
+        for txs in txids.chunks(self.tx_per_page as usize) {
+            self.put_txs_ids_to_page(txs)
+                .await
+                .wrap_err("Failed to store announcements in pages")?;
+        }
 
-        let mut raw_mempool = self.state_storage.get_mempool().await?.unwrap_or_default();
-        raw_mempool.retain(|txid| *txid != announcement_txid);
-        self.state_storage.put_mempool(raw_mempool).await?;
+        for announcement_tx in announcement_txs {
+            let announcement_txid = announcement_tx.bitcoin_tx.txid();
+            self.state_storage
+                .delete_mempool_entry(&announcement_txid)
+                .await?;
 
-        tracing::info!(
-            txid = announcement_txid.to_string(),
-            "Announcement is handled"
-        );
+            let mut raw_mempool = self.state_storage.get_mempool().await?.unwrap_or_default();
+            raw_mempool.retain(|txid| *txid != announcement_txid);
+            self.state_storage.put_mempool(raw_mempool).await?;
+
+            self.txs_storage.put_yuv_tx(announcement_tx).await?;
+
+            tracing::info!(
+                txid = announcement_txid.to_string(),
+                "Announcement is handled"
+            );
+        }
 
         Ok(())
     }
@@ -736,7 +766,6 @@ where
             .get_yuv_tx(tx_id)
             .await
             .wrap_err("failed to get yuv tx")?;
-
         if let Some(yuv_tx) = yuv_tx {
             return Ok(Some(yuv_tx));
         }

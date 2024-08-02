@@ -1,6 +1,6 @@
 use bitcoin::{BlockHash, Txid};
 use bitcoin_client::json::GetBlockTxResult;
-use bitcoin_client::BitcoinRpcApi;
+use bitcoin_client::{BitcoinRpcApi, JsonRpcError};
 use event_bus::{typeid, EventBus};
 use eyre::bail;
 use std::collections::{HashMap, VecDeque};
@@ -172,20 +172,29 @@ where
     /// Handle new transaction to confirm it. If transaction is already confirmed, then it will be
     /// sent to the `TxChecker`. Otherwise it will be added to the queue.
     async fn handle_tx_to_confirm(&mut self, txid: Txid) -> eyre::Result<()> {
-        let got_tx = self
+        self.queue.entry(txid).or_insert(SystemTime::now());
+
+        let got_tx_result = self
             .bitcoin_client
             .get_raw_transaction_info(&txid, None)
-            .await?;
+            .await;
 
-        if let Some(confirmations) = got_tx.confirmations {
+        let tx = match got_tx_result {
+            Err(bitcoin_client::Error::JsonRpc(JsonRpcError::Rpc(err))) if err.code == -5 => {
+                tracing::error!("Couldn't find the tx {:?} in the blockchain", txid);
+                return Ok(());
+            }
+            res => res?,
+        };
+
+        if let Some(confirmations) = tx.confirmations {
+            self.handle_mined_txs(vec![txid]).await?;
+
             if confirmations >= self.confirmations_number as u32 {
                 self.new_confirmed_txs(&[txid]).await;
                 return Ok(());
             }
-            self.handle_mined_txs(vec![txid]).await?;
         }
-
-        self.queue.entry(txid).or_insert(SystemTime::now());
 
         Ok(())
     }

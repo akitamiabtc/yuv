@@ -1,9 +1,5 @@
-#[cfg(feature = "consensus")]
-use alloc::vec::Vec;
 use core::str::FromStr;
 
-#[cfg(feature = "consensus")]
-use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::{
     hashes::hash160, key::XOnlyPublicKey, secp256k1::PublicKey, ScriptBuf, TxIn, TxOut, Witness,
 };
@@ -122,26 +118,4 @@ fn test_proof_simple_checks() {
     let got = proof.checked_check_by_input(&txin);
 
     assert!(got.is_ok(), "Check by input failed, got: {:?}", got);
-}
-
-#[test]
-#[cfg(feature = "consensus")]
-fn test_lightning_htlc_data_consensus_encode() {
-    let data = LightningHtlcData::new(
-        *REVOCATION_PUBKEY_HASH,
-        *REMOTE_HTLC_PUBKEY,
-        *LOCAL_HTLC_PUBKEY,
-        *OFFERED_PAYMENT_HASH,
-        HtlcScriptKind::Received { cltv_expiry: 100 },
-    );
-
-    let mut bytes = Vec::new();
-
-    data.consensus_encode(&mut bytes)
-        .expect("failed to encode data");
-
-    let decoded_data =
-        LightningHtlcData::consensus_decode(&mut bytes.as_slice()).expect("failed to decode data");
-
-    assert_eq!(data, decoded_data, "Converting back and forth should work");
 }

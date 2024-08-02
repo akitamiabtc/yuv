@@ -38,8 +38,6 @@ pub enum ControllerMessage {
         txs: Vec<Txid>,
         new_indexing_height: usize,
     },
-    /// Remove checked announcement from handling transactions.
-    CheckedAnnouncement(Txid),
     /// New inventory to share with peers.
     AttachedTxs(Vec<Txid>),
     /// Data that is received from p2p.

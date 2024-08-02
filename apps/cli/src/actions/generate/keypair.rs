@@ -28,9 +28,9 @@ pub fn run(
     let (seckey, pubkey) = secp_ctx.generate_keypair(&mut thread_rng());
 
     let privkey = PrivateKey::new(seckey, network);
-    let even_pubkey = privkey.even_public_key(secp_ctx);
+    let even_pubkey = privkey.public_key(secp_ctx).even_public_key(secp_ctx);
 
-    let (xonly, _parity) = even_pubkey.inner.x_only_public_key();
+    let (xonly, _parity) = even_pubkey.x_only_public_key();
 
     // NOTE: The only way I found to add public key to taproot without
     // tweaking the key with hash of the merkle root:

@@ -184,6 +184,7 @@ impl Node {
             self.btc_client.clone(),
             self.state_storage.clone(),
             &self.event_bus,
+            self.config.network,
         );
 
         indexer.add_subindexer(AnnouncementsIndexer::new(

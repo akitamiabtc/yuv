@@ -18,8 +18,9 @@ use bitcoin::{
 };
 use core::fmt::{self, Display};
 
-use crate::errors::ToLocalScriptParseError;
-use crate::PixelKey;
+use super::errors::ToLocalScriptParseError;
+
+pub type LightningCommitmentProofData = ToLocalScript;
 
 /// Represents parsed values inside a Lighting Network commitment transaction
 /// `to_local` output script.
@@ -36,14 +37,14 @@ use crate::PixelKey;
 ///    <local_delayedpubkey>
 /// OP_ENDIF
 /// ```
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ToLocalScript {
     /// Derived from revocation secret key.
     ///
     /// By rules of the YUV protocol, this key is always tweaked by pixel in
     /// script.
-    pub revocation_pubkey: PixelKey,
+    pub revocation_pubkey: PublicKey,
 
     /// Delay after which the `to_local` output can be spent by the local.
     pub to_self_delay: u16,
@@ -62,7 +63,7 @@ impl Display for ToLocalScript {
 
 impl ToLocalScript {
     pub fn new(
-        revocation_pubkey: PixelKey,
+        revocation_pubkey: PublicKey,
         to_self_delay: u16,
         local_delayed_pubkey: PublicKey,
     ) -> Self {
@@ -78,7 +79,7 @@ impl From<&ToLocalScript> for ScriptBuf {
     fn from(value: &ToLocalScript) -> Self {
         Builder::new()
             .push_opcode(OP_IF)
-            .push_slice(value.revocation_pubkey.0.inner.serialize())
+            .push_slice(value.revocation_pubkey.serialize())
             .push_opcode(OP_ELSE)
             .push_int(value.to_self_delay as i64)
             .push_opcode(OP_CSV)
@@ -183,7 +184,7 @@ impl TryFrom<&ScriptBuf> for ToLocalScript {
 
         match (pubkeys.as_slice(), to_self_delay) {
             ([revocation_pubkey, local_delayed_pubkey], Some(to_self_delay)) => Ok(Self {
-                revocation_pubkey: PixelKey(bitcoin::PublicKey::new(revocation_pubkey.unwrap())),
+                revocation_pubkey: revocation_pubkey.unwrap(),
                 to_self_delay,
                 local_delayed_pubkey: local_delayed_pubkey.unwrap(),
             }),
@@ -198,8 +199,7 @@ impl TryFrom<&ScriptBuf> for ToLocalScript {
 mod tests {
     use bitcoin::ScriptBuf;
 
-    use crate::script::ToLocalScript;
-    use crate::ToLocalScriptParseError;
+    use super::*;
 
     /// Test simple example from [BOLT 3]
     ///

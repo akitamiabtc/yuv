@@ -3,8 +3,8 @@ mod traits;
 pub use traits::KeyValueError;
 pub use traits::{
     BlockIndexerStorage, ChromaInfoStorage, FrozenTxsStorage, InvalidTxsStorage, InventoryStorage,
-    KeyValueResult, KeyValueStorage, MempoolEntryStorage, MempoolStatus, MempoolStorage,
-    MempoolTxEntry, PagesNumberStorage, PagesStorage, TransactionsStorage,
+    IsIndexedStorage, KeyValueResult, KeyValueStorage, MempoolEntryStorage, MempoolStatus,
+    MempoolStorage, MempoolTxEntry, PagesNumberStorage, PagesStorage, TransactionsStorage,
 };
 
 mod impls;

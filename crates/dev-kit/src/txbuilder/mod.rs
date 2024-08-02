@@ -27,6 +27,9 @@ use bdk::{
     FeeRate as BdkFeeRate, SignOptions,
 };
 
+#[cfg(feature = "bulletproof")]
+use yuv_pixels::Bulletproof;
+
 use yuv_pixels::{
     Chroma, EmptyPixelProof, MultisigPixelProof, Pixel, PixelKey, PixelProof, SigPixelProof,
     ToEvenPublicKey, ZERO_PUBLIC_KEY,
@@ -820,13 +823,9 @@ where
         };
 
         tx_outs.iter_mut().skip(offset).for_each(|tx_out| {
-            let (pixel_proof, script_pubkey) = get_empty_pixel_proof(
-                self.private_key
-                    .public_key(&ctx)
-                    .even_public_key(&ctx)
-                    .inner,
-            )
-            .expect("Failed to get empty pixelproof");
+            let (pixel_proof, script_pubkey) =
+                get_empty_pixel_proof(self.private_key.public_key(&ctx).even_public_key(&ctx))
+                    .expect("Failed to get empty pixelproof");
 
             output_proofs.push(pixel_proof);
             tx_out.script_pubkey = script_pubkey;
@@ -1117,12 +1116,12 @@ where
             BuilderInput::Pixel { .. } => {
                 let tweaked_pubkey = PixelKey::new_with_ctx(proof.pixel(), &pubkey1.inner, ctx)?;
 
-                descriptor!(wpkh(tweaked_pubkey))?
+                descriptor!(wpkh(tweaked_pubkey.to_public_key()))?
             }
             BuilderInput::TweakedSatoshis { .. } => {
                 let tweaked_pubkey = PixelKey::new_with_ctx(Pixel::empty(), &pubkey1.inner, ctx)?;
 
-                descriptor!(wpkh(tweaked_pubkey))?
+                descriptor!(wpkh(tweaked_pubkey.to_public_key()))?
             }
             BuilderInput::Multisig2x2 {
                 second_signer_key, ..
@@ -1133,13 +1132,13 @@ where
                 let (tweaked_key1, key2) =
                     sort_and_tweak(ctx, self.private_key, *second_signer_key, proof)?;
 
-                descriptor!(wsh(multi(2, tweaked_key1, key2)))?
+                descriptor!(wsh(multi(2, tweaked_key1.to_public_key(), key2)))?
             }
             #[cfg(feature = "bulletproof")]
             BuilderInput::BulletproofPixel { .. } => {
                 let tweaked_pubkey = PixelKey::new_with_ctx(proof.pixel(), &pubkey1.inner, ctx)?;
 
-                descriptor!(wpkh(tweaked_pubkey))?
+                descriptor!(wpkh(tweaked_pubkey.to_public_key()))?
             }
         };
 
@@ -1174,11 +1173,12 @@ where
                 let pixel = Pixel::new(*amount, *chroma);
                 let pixel_key = PixelKey::new(pixel, recipient)?;
 
-                let pubkey_hash = &pixel_key
-                    .wpubkey_hash()
-                    .ok_or_eyre("Pixel key is not compressed")?;
-
-                let script_pubkey = ScriptBuf::new_v0_p2wpkh(pubkey_hash);
+                let script_pubkey = ScriptBuf::new_v0_p2wpkh(
+                    &pixel_key
+                        .to_public_key()
+                        .wpubkey_hash()
+                        .ok_or_eyre("Pixel key is not compressed")?,
+                );
 
                 let pixel_proof = SigPixelProof::new(pixel, *recipient);
 
@@ -1198,9 +1198,9 @@ where
 
                 let multisig_proof =
                     MultisigPixelProof::new(pixel, participants.clone(), *required_signatures);
-                let script_pubkey = multisig_proof.to_script_pubkey();
+                let script_pubkey = multisig_proof.to_script_pubkey()?;
 
-                output_proofs.push(multisig_proof.into());
+                output_proofs.push(PixelProof::Multisig(multisig_proof));
 
                 (script_pubkey, *satoshis)
             }
@@ -1221,7 +1221,7 @@ where
 
                 let pixel_key = PixelKey::new(pixel, &recipient.inner)?;
 
-                let pixel_proof = PixelProof::bulletproof(
+                let pixel_proof = PixelProof::bulletproof(Bulletproof::new(
                     pixel,
                     recipient.inner,
                     sender.inner,
@@ -1229,11 +1229,12 @@ where
                     proof.clone(),
                     *signature,
                     *chroma_signature,
-                );
+                ));
 
                 let script = ScriptBuf::new_v0_p2wpkh(
                     &pixel_key
-                        .0
+                        .even_public_key(&Secp256k1::new())
+                        .to_public_key()
                         .wpubkey_hash()
                         .ok_or_else(|| eyre!("Pixel key is not compressed"))?,
                 );
@@ -1326,11 +1327,12 @@ fn sort_and_tweak(
 fn get_empty_pixel_proof(recipient: secp256k1::PublicKey) -> eyre::Result<(PixelProof, ScriptBuf)> {
     let pixel_key = PixelKey::new(Pixel::empty(), &recipient)?;
 
-    let pubkey_hash = &pixel_key
+    let pubkey_hash = pixel_key
+        .to_public_key()
         .wpubkey_hash()
         .ok_or_eyre("Pixel key is not compressed")?;
 
-    let script_pubkey = ScriptBuf::new_v0_p2wpkh(pubkey_hash);
+    let script_pubkey = ScriptBuf::new_v0_p2wpkh(&pubkey_hash);
 
     Ok((
         PixelProof::EmptyPixel(EmptyPixelProof::new(recipient)),

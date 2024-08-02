@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2024-02-08
+
+### Fixed
+
+* Add the deprecated `Pending` mempool status to preserve the backward compatibility.
+* Update the confirmator to not fail if couldn't fetch a tx from Bitcoin node.
+* Update the `TxConfirmator` to handle confirmed txs as mined, and only then handle them as
+  confirmed.
+
+### Added
+
+* Save announcement transactions to the persisten storage.
+* Add support for hex encoded transactions in RPC methods.
+* Add few CLI commands.
+* Added P2WSH support.
+
 ## [0.3.4] - 2024-09-07
 
 ### Added

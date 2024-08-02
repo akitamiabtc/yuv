@@ -118,20 +118,8 @@ where
 
         for (tx, sender) in txs {
             let is_valid = self
-                .check_transaction(
-                    tx.clone(),
-                    sender,
-                    &mut invalid_txs,
-                    &mut checked_txs,
-                    &mut not_found_parents,
-                )
+                .check_transaction(tx.clone(), sender, &mut checked_txs, &mut not_found_parents)
                 .await?;
-
-            // There is no sense to put it into storage or mark as an invalid tx if it's an
-            // announcement.
-            if let YuvTxType::Announcement { .. } = &tx.tx_type {
-                continue;
-            }
 
             if !is_valid {
                 invalid_txs.push(tx.clone());
@@ -225,15 +213,13 @@ where
         &mut self,
         tx: YuvTransaction,
         sender: Option<SocketAddr>,
-        invalid_txs: &mut Vec<YuvTransaction>,
         checked_txs: &mut BTreeMap<Txid, YuvTransaction>,
         not_found_parents: &mut HashMap<SocketAddr, Vec<Txid>>,
     ) -> Result<bool> {
         let is_valid = match &tx.tx_type {
             YuvTxType::Issue { announcement, .. } => self.check_issuance(&tx, announcement).await?,
             YuvTxType::Announcement(announcement) => {
-                self.check_announcements(&tx, announcement, invalid_txs)
-                    .await?
+                self.check_announcements(&tx, announcement).await?
             }
             YuvTxType::Transfer {
                 ref input_proofs, ..
@@ -344,34 +330,22 @@ where
         &self,
         tx: &YuvTransaction,
         announcement: &Announcement,
-        invalid_txs: &mut Vec<YuvTransaction>,
     ) -> Result<bool> {
-        let is_checked = match announcement {
+        match announcement {
             Announcement::Chroma(announcement) => {
-                self.check_chroma_announcement(tx, announcement).await?
+                self.check_chroma_announcement(tx, announcement).await
             }
             Announcement::Freeze(announcement) => {
-                self.check_freeze_announcement(tx, announcement).await?
+                self.check_freeze_announcement(tx, announcement).await
             }
             Announcement::Issue(announcement) => {
-                self.check_issue_announcement(tx, announcement).await?
+                self.check_issue_announcement(tx, announcement).await
             }
             Announcement::TransferOwnership(announcement) => {
                 self.check_transfer_ownership_announcement(tx, announcement)
-                    .await?
+                    .await
             }
-        };
-
-        self.event_bus
-            .send(ControllerMessage::CheckedAnnouncement(tx.bitcoin_tx.txid()))
-            .await;
-
-        if !is_checked {
-            invalid_txs.push(tx.clone());
-            return Ok(false);
         }
-
-        Ok(true)
     }
 
     /// Check that [ChromaAnnouncement] is valid.
@@ -514,9 +488,7 @@ where
         // Non-bulletproof issuance must be checked.
         #[cfg(feature = "bulletproof")]
         if announcement_yuv_tx.is_bulletproof() {
-            self.handle_checked_issue_announcement(announcement_yuv_tx, announcement)
-                .await?;
-
+            self.update_supply(announcement).await?;
             return Ok(true);
         }
 
@@ -542,23 +514,9 @@ where
             }
         }
 
-        self.handle_checked_issue_announcement(announcement_yuv_tx, announcement)
-            .await?;
+        self.update_supply(announcement).await?;
 
         Ok(true)
-    }
-
-    async fn handle_checked_issue_announcement(
-        &self,
-        announcement_yuv_tx: &YuvTransaction,
-        announcement: &IssueAnnouncement,
-    ) -> Result<()> {
-        self.update_supply(announcement).await?;
-        self.txs_storage
-            .put_yuv_tx(announcement_yuv_tx.clone())
-            .await?;
-
-        Ok(())
     }
 
     /// Check that [TransferOwnershipAnnouncement] is valid.

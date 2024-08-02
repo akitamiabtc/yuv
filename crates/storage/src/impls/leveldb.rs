@@ -6,7 +6,7 @@ use rusty_leveldb::AsyncDB;
 use serde::{Deserialize, Serialize};
 
 use crate::traits::pages::PagesNumberStorage;
-use crate::traits::{ChromaInfoStorage, MempoolStorage, PagesStorage};
+use crate::traits::{ChromaInfoStorage, IsIndexedStorage, MempoolStorage, PagesStorage};
 
 use crate::MempoolEntryStorage;
 use crate::{
@@ -116,3 +116,5 @@ impl ChromaInfoStorage for LevelDB {}
 impl MempoolStorage for LevelDB {}
 
 impl MempoolEntryStorage for LevelDB {}
+
+impl IsIndexedStorage for LevelDB {}

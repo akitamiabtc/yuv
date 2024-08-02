@@ -1,5 +1,3 @@
-use std::usize;
-
 use crate::{check_equal_lengths, context::Context};
 use bdk::blockchain::Blockchain;
 use clap::Args;

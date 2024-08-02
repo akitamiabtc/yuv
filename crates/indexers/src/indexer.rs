@@ -11,8 +11,8 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-use yuv_storage::BlockIndexerStorage;
-use yuv_types::{ControllerMessage, IndexerMessage};
+use yuv_storage::{BlockIndexerStorage, IsIndexedStorage};
+use yuv_types::{network::Network, ControllerMessage, IndexerMessage};
 
 use crate::{
     blockloader::{BlockLoaderConfig, IndexBlocksEvent},
@@ -32,7 +32,7 @@ const RESTART_ATTEMPT_INTERVAL: Duration = Duration::from_secs(10);
 /// Using polling indexes blocks from Bitcoin and broadcasts it to inner indexers.
 pub struct BitcoinBlockIndexer<BS, BC>
 where
-    BS: BlockIndexerStorage,
+    BS: BlockIndexerStorage + IsIndexedStorage,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     /// Bitcoin RPC Client.
@@ -47,14 +47,21 @@ where
     confirmed_block_hash: Option<BlockHash>,
     /// Event bus for receiving messages about the blockchain reorganization.
     event_bus: EventBus,
+    /// Bitcoin network
+    network: Network,
 }
 
 impl<BS, BC> BitcoinBlockIndexer<BS, BC>
 where
-    BS: BlockIndexerStorage + Send + Sync + 'static,
+    BS: BlockIndexerStorage + IsIndexedStorage + Send + Sync + 'static,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
-    pub fn new(bitcoin_client: Arc<BC>, storage: BS, event_bus: &EventBus) -> Self {
+    pub fn new(
+        bitcoin_client: Arc<BC>,
+        storage: BS,
+        event_bus: &EventBus,
+        network: Network,
+    ) -> Self {
         let event_bus = event_bus
             .extract(&typeid![ControllerMessage], &typeid![IndexerMessage])
             .expect("event channels must be presented");
@@ -66,6 +73,7 @@ where
             confirmed_block_height: 0,
             confirmed_block_hash: None,
             event_bus,
+            network,
         }
     }
 
@@ -160,6 +168,8 @@ where
             "Finished initial blocks indexing",
         );
 
+        self.storage.put_is_indexed().await?;
+
         Ok(())
     }
 
@@ -168,7 +178,25 @@ where
     /// Returns `last_indexed_height` if `starting_block_hash` is not provided
     /// and vice versa
     async fn get_starting_block_height(&self, params: &IndexingParams) -> eyre::Result<usize> {
-        let mut starting_block_height = 0;
+        // Starting block height depends on the YUV genesis block for the given network.
+        // If the genesis block is not defined for the given network, e.g. `network::Regtest`,
+        // the height is set to 0.
+        let mut starting_block_height =
+            if let Some(starting_block_by_network) = self.network.yuv_genesis_block() {
+                self.bitcoin_client
+                    .get_block_info(&starting_block_by_network)
+                    .await?
+                    .block_data
+                    .height
+            } else {
+                0
+            };
+
+        // Bugfix: this is a temporary condition that requires all the nodes to reindex the chain from the genesis block.
+        // TODO: remove this check in the future.
+        if self.storage.get_is_indexed().await?.is_none() {
+            return Ok(starting_block_height);
+        }
 
         if let Some(last_indexed_hash) = self.storage.get_last_indexed_hash().await? {
             let last_indexed_height = self.get_block_height(&last_indexed_hash).await?;

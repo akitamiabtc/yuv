@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use std::{mem::size_of, net::SocketAddr};
 
 use async_trait::async_trait;
@@ -95,4 +96,6 @@ pub enum MempoolStatus {
     WaitingMined,
     Mined,
     Attaching,
+    #[deprecated]
+    Pending,
 }

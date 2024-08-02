@@ -34,6 +34,7 @@ pub enum YuvTransactionStatus {
     Pending,
 }
 
+#[allow(deprecated)]
 impl From<MempoolStatus> for YuvTransactionStatus {
     fn from(value: MempoolStatus) -> Self {
         match value {
@@ -41,6 +42,7 @@ impl From<MempoolStatus> for YuvTransactionStatus {
             MempoolStatus::WaitingMined => Self::WaitingMined,
             MempoolStatus::Mined => Self::Mined,
             MempoolStatus::Attaching => Self::Attaching,
+            MempoolStatus::Pending => Self::Pending,
         }
     }
 }
