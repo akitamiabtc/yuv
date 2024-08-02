@@ -8,18 +8,19 @@ All the types that come through the storage are serialized using `ciborium`.
 Example of using the [InventoryStorage](src/traits/inventory.rs):
 
 ```rust
-use std::str::FromStr;
+use std::{collections::VecDeque, str::FromStr};
 use yuv_storage::{InventoryStorage, LevelDB};
 use bitcoin::Txid;
+
 
 tokio_test::block_on(async {
     // Init the DB.
     let db = LevelDB::in_memory().expect("LevelDB should init");
 
     // Put a vector of Txids to the DB.
-    db.put_inventory(vec![Txid::from_str(
+    db.put_inventory(VecDeque::from([Txid::from_str(
         "b4f45a2e3857b1b5f74ca7ed81a95b039baa89a49b1fd41b96e47afb129c0810",
-    ).unwrap()])
+    ).unwrap()]))
         .await
         .expect("Inventory should be put");
 

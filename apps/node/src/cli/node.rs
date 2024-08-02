@@ -18,18 +18,18 @@ use yuv_p2p::{
     net::{ReactorTcp, Waker},
 };
 use yuv_rpc_server::ServerConfig;
-use yuv_storage::{FlushStrategy, LevelDB, LevelDbOptions, TxStatesStorage};
+use yuv_storage::{FlushStrategy, LevelDB, LevelDbOptions};
 use yuv_tx_attach::GraphBuilder;
-use yuv_tx_check::{Config as CheckerConfig, TxCheckerWorkerPool};
+use yuv_tx_check::TxChecker;
 use yuv_tx_confirm::TxConfirmator;
-use yuv_types::{ControllerMessage, GraphBuilderMessage, TxCheckerMessage, TxConfirmMessage};
+use yuv_types::{
+    ControllerMessage, GraphBuilderMessage, IndexerMessage, TxCheckerMessage, TxConfirmMessage,
+};
 
 /// Default size of the channel for the event bus.
 const DEFAULT_CHANNEL_SIZE: usize = 1000;
 /// The limit of time to wait for the node to shutdown.
 const DEFAULT_SHUTDOWN_TIMEOUT_SECS: u64 = 30;
-// TODO: Temporary solution. Need to be removed after the refactoring of the TxCheckerWorkerPool.
-const TX_CHECKERS_POOL_SIZE: usize = 1;
 
 /// Node encapsulate node service's start
 pub struct Node {
@@ -37,7 +37,6 @@ pub struct Node {
     event_bus: EventBus,
     txs_storage: LevelDB,
     state_storage: LevelDB,
-    txs_states_storage: TxStatesStorage,
     btc_client: Arc<BitcoinRpcClient>,
 
     cancelation: CancellationToken,
@@ -48,7 +47,6 @@ impl Node {
     pub async fn new(config: NodeConfig) -> eyre::Result<Self> {
         let event_bus = Self::init_event_bus();
         let (txs_storage, state_storage) = Self::init_storage(config.storage.clone())?;
-        let tx_states_storage = TxStatesStorage::default();
 
         let btc_client = Arc::new(
             BitcoinRpcClient::new(
@@ -64,7 +62,6 @@ impl Node {
             event_bus,
             txs_storage,
             state_storage,
-            txs_states_storage: tx_states_storage,
             btc_client,
             cancelation: CancellationToken::new(),
             task_tracker: TaskTracker::new(),
@@ -80,12 +77,12 @@ impl Node {
     /// listen to inbound messages.
     pub async fn run(&self) -> eyre::Result<()> {
         self.spawn_graph_builder();
-        self.spawn_tx_checkers_worker_pool()?;
+        self.spawn_tx_checker()?;
         self.spawn_tx_confirmator();
         self.spawn_indexer().await?;
 
         let p2p_handle = self.spawn_p2p()?;
-        self.spawn_controller(p2p_handle);
+        self.spawn_controller(p2p_handle).await?;
 
         self.spawn_rpc();
 
@@ -109,48 +106,43 @@ impl Node {
         Ok(handle)
     }
 
-    fn spawn_controller(&self, handle: Handle<Waker>) {
-        let controller = Controller::new(
+    async fn spawn_controller(&self, handle: Handle<Waker>) -> eyre::Result<()> {
+        let mut controller = Controller::new(
             &self.event_bus,
             self.txs_storage.clone(),
             self.state_storage.clone(),
-            self.txs_states_storage.clone(),
             handle,
+            self.config.storage.tx_per_page,
         )
         .set_inv_sharing_interval(Duration::from_secs(
             self.config.controller.inv_sharing_interval,
         ))
         .set_max_inv_size(self.config.controller.max_inv_size);
 
+        controller.handle_mempool_txs().await?;
+
         self.task_tracker
             .spawn(controller.run(self.cancelation.clone()));
+
+        Ok(())
     }
 
     fn spawn_graph_builder(&self) {
-        let graph_builder = GraphBuilder::new(
-            self.txs_storage.clone(),
-            &self.event_bus,
-            self.config.storage.tx_per_page,
-        );
+        let graph_builder = GraphBuilder::new(self.txs_storage.clone(), &self.event_bus);
 
         self.task_tracker
             .spawn(graph_builder.run(self.cancelation.clone()));
     }
 
-    fn spawn_tx_checkers_worker_pool(&self) -> eyre::Result<()> {
-        let worker_pool = TxCheckerWorkerPool::from_config(
-            TX_CHECKERS_POOL_SIZE,
-            CheckerConfig {
-                full_event_bus: self.event_bus.clone(),
-                txs_storage: self.txs_storage.clone(),
-                state_storage: self.state_storage.clone(),
-                bitcoin_client: Arc::clone(&self.btc_client),
-            },
-        )
-        .wrap_err("TxCheckers worker pool must run successfully")?;
+    fn spawn_tx_checker(&self) -> eyre::Result<()> {
+        let tx_checker = TxChecker::new(
+            self.event_bus.clone(),
+            self.txs_storage.clone(),
+            self.state_storage.clone(),
+        );
 
         self.task_tracker
-            .spawn(worker_pool.run(self.cancelation.clone()));
+            .spawn(tx_checker.run(self.cancelation.clone()));
 
         Ok(())
     }
@@ -182,7 +174,6 @@ impl Node {
             self.txs_storage.clone(),
             self.state_storage.clone(),
             self.event_bus.clone(),
-            self.txs_states_storage.clone(),
             self.btc_client.clone(),
             self.cancelation.clone(),
         ));
@@ -192,8 +183,7 @@ impl Node {
         let mut indexer = BitcoinBlockIndexer::new(
             self.btc_client.clone(),
             self.state_storage.clone(),
-            self.config.indexer.confirmations_number,
-            self.config.network,
+            &self.event_bus,
         );
 
         indexer.add_subindexer(AnnouncementsIndexer::new(
@@ -209,6 +199,7 @@ impl Node {
                 self.config.indexer.clone().into(),
                 self.config.indexer.blockloader.clone(),
                 self.btc_client.clone(),
+                self.config.indexer.confirmations_number as usize,
                 self.cancelation.clone(),
             )
             .await
@@ -272,6 +263,7 @@ impl Node {
         event_bus.register::<GraphBuilderMessage>(Some(DEFAULT_CHANNEL_SIZE));
         event_bus.register::<ControllerMessage>(Some(DEFAULT_CHANNEL_SIZE));
         event_bus.register::<TxConfirmMessage>(Some(DEFAULT_CHANNEL_SIZE));
+        event_bus.register::<IndexerMessage>(Some(DEFAULT_CHANNEL_SIZE));
 
         event_bus
     }

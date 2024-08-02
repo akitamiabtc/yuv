@@ -7,7 +7,6 @@ use std::net;
 /// Peer-to-peer socket abstraction.
 #[derive(Debug)]
 pub struct Socket<R: Read + Write> {
-    pub address: net::SocketAddr,
     pub link: Link,
 
     buffer: Vec<u8>,
@@ -28,11 +27,10 @@ impl Socket<net::TcpStream> {
 
 impl<R: Read + Write> Socket<R> {
     /// Create a new socket from a `io::Read` and an address pair.
-    pub fn from(raw: R, address: net::SocketAddr, link: Link) -> Self {
+    pub fn from(raw: R, link: Link) -> Self {
         Self {
             raw,
             link,
-            address,
             buffer: Vec::with_capacity(1024),
         }
     }

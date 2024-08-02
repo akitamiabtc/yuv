@@ -82,12 +82,12 @@ pub async fn run(
     } else {
         let client = ctx.yuv_client()?;
 
-        client.send_raw_yuv_tx(tx.clone(), None).await?;
+        client.send_yuv_tx(tx.hex(), None).await?;
     }
 
     println!("tx id: {}", tx.bitcoin_tx.txid());
 
-    println!("{}", serde_yaml::to_string(&tx.tx_type)?);
+    println!("tx hex: {}", tx.hex());
 
     Ok(())
 }

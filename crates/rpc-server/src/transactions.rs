@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use bitcoin::{Amount, OutPoint, Txid};
+use bitcoin::{Amount, BlockHash, OutPoint, Txid};
 use bitcoin_client::BitcoinRpcApi;
 use event_bus::{typeid, EventBus};
 use jsonrpsee::{
@@ -12,12 +12,13 @@ use jsonrpsee::{
 use std::sync::Arc;
 use yuv_pixels::Chroma;
 use yuv_rpc_api::transactions::{
-    EmulateYuvTransactionResponse, GetRawYuvTransactionResponse, YuvTransactionResponse,
-    YuvTransactionsRpcServer,
+    EmulateYuvTransactionResponse, GetRawYuvTransactionResponseHex,
+    GetRawYuvTransactionResponseJson, ProvideYuvProofRequest, YuvTransactionResponse,
+    YuvTransactionStatus, YuvTransactionsRpcServer,
 };
 use yuv_storage::{
-    ChromaInfoStorage, FrozenTxsStorage, KeyValueError, PagesStorage, TransactionsStorage, TxState,
-    TxStatesStorage,
+    ChromaInfoStorage, FrozenTxsStorage, KeyValueError, MempoolEntryStorage, PagesStorage,
+    TransactionsStorage,
 };
 use yuv_tx_check::{check_transaction, CheckError};
 use yuv_types::{
@@ -26,32 +27,29 @@ use yuv_types::{
 
 // TODO: Rename to "RpcController"
 /// Controller for transactions from RPC.
-pub struct TransactionsController<TransactionsStorage, AnnouncementStorage, BitcoinClient> {
+pub struct TransactionsController<TransactionsStorage, StateStorage, BitcoinClient> {
     /// Max items per request
     max_items_per_request: usize,
     /// Internal storage of transactions.
     txs_storage: TransactionsStorage,
-    /// Internal storage for announcements.
-    announcement_storage: AnnouncementStorage,
+    /// Internal state storage.
+    state_storage: StateStorage,
     /// Event bus for simplifying communication with services.
     event_bus: EventBus,
-    /// Internal storage of transactions' states.
-    txs_states_storage: TxStatesStorage,
     /// Bitcoin RPC Client.
     bitcoin_client: Arc<BitcoinClient>,
 }
 
-impl<TXS, AS, BC> TransactionsController<TXS, AS, BC>
+impl<TS, SS, BC> TransactionsController<TS, SS, BC>
 where
-    TXS: TransactionsStorage + PagesStorage + Send + Sync + 'static,
-    AS: FrozenTxsStorage + ChromaInfoStorage + Send + Sync + 'static,
+    TS: TransactionsStorage + PagesStorage + Send + Sync + 'static,
+    SS: FrozenTxsStorage + ChromaInfoStorage + Send + Sync + 'static,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     pub fn new(
-        storage: TXS,
+        storage: TS,
         full_event_bus: EventBus,
-        txs_states_storage: TxStatesStorage,
-        frozen_txs_storage: AS,
+        state_storage: SS,
         bitcoin_client: Arc<BC>,
         max_items_per_request: usize,
     ) -> Self {
@@ -63,23 +61,22 @@ where
             max_items_per_request,
             txs_storage: storage,
             event_bus,
-            txs_states_storage,
-            announcement_storage: frozen_txs_storage,
+            state_storage,
             bitcoin_client,
         }
     }
 }
 
-impl<TXS, FZS, BC> TransactionsController<TXS, FZS, BC>
+impl<TS, SS, BC> TransactionsController<TS, SS, BC>
 where
-    TXS: TransactionsStorage + PagesStorage + Send + Sync + 'static,
-    FZS: FrozenTxsStorage + ChromaInfoStorage + Send + Sync + 'static,
+    TS: TransactionsStorage + PagesStorage + Send + Sync + 'static,
+    SS: FrozenTxsStorage + ChromaInfoStorage + Send + Sync + 'static,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     async fn send_txs_to_confirm(&self, yuv_txs: Vec<YuvTransaction>) -> RpcResult<()> {
         // Send message to message handler about new tx with proof.
         self.event_bus
-            .try_send(ControllerMessage::ConfirmBatchTx(yuv_txs))
+            .try_send(ControllerMessage::InitializeTxs(yuv_txs))
             .await
             // If we failed to send message to message handler, then it's dead.
             .map_err(|_| {
@@ -96,10 +93,10 @@ where
 }
 
 #[async_trait]
-impl<TXS, AS, BC> YuvTransactionsRpcServer for TransactionsController<TXS, AS, BC>
+impl<TS, SS, BC> YuvTransactionsRpcServer for TransactionsController<TS, SS, BC>
 where
-    TXS: TransactionsStorage + PagesStorage + Clone + Send + Sync + 'static,
-    AS: FrozenTxsStorage + ChromaInfoStorage + Clone + Send + Sync + 'static,
+    TS: TransactionsStorage + PagesStorage + Clone + Send + Sync + 'static,
+    SS: FrozenTxsStorage + ChromaInfoStorage + MempoolEntryStorage + Clone + Send + Sync + 'static,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     /// Handle new YUV transaction with proof to check.
@@ -110,8 +107,31 @@ where
         Ok(true)
     }
 
-    async fn provide_list_yuv_proofs(&self, yuv_txs: Vec<YuvTransaction>) -> RpcResult<bool> {
-        if yuv_txs.len() > self.max_items_per_request {
+    /// Handle new YUV transaction with proof to check.
+    async fn provide_yuv_proof_short(
+        &self,
+        txid: Txid,
+        tx_type: String,
+        blockhash: Option<BlockHash>,
+    ) -> RpcResult<bool> {
+        let tx_type = YuvTxType::from_hex(tx_type).map_err(|err| {
+            tracing::error!("Failed to parse tx type hex: {err}");
+            ErrorObjectOwned::owned(
+                INVALID_REQUEST_CODE,
+                "Hex parse error",
+                Option::<Vec<u8>>::None,
+            )
+        })?;
+
+        self.provide_list_yuv_proofs(vec![ProvideYuvProofRequest::new(txid, tx_type, blockhash)])
+            .await
+    }
+
+    async fn provide_list_yuv_proofs(
+        &self,
+        proofs: Vec<ProvideYuvProofRequest>,
+    ) -> RpcResult<bool> {
+        if proofs.len() > self.max_items_per_request {
             return Err(ErrorObject::owned(
                 INVALID_REQUEST_CODE,
                 format!(
@@ -122,17 +142,53 @@ where
             ));
         }
 
+        let mut yuv_txs = Vec::with_capacity(proofs.len());
+        for proof in proofs {
+            let bitcoin_tx = self
+                .bitcoin_client
+                .get_raw_transaction(&proof.txid, proof.blockhash)
+                .await
+                .map_err(|err| {
+                    tracing::error!("Failed to get raw Bitcoin transaction by txid: {err}");
+                    ErrorObjectOwned::owned(
+                        INTERNAL_ERROR_CODE,
+                        "Service is dead",
+                        Option::<Vec<u8>>::None,
+                    )
+                })?;
+
+            let yuv_tx = YuvTransaction::new(bitcoin_tx, proof.tx_type);
+            yuv_txs.push(yuv_tx);
+        }
+
+        // Send message to message handler to wait its confirmation.
         self.send_txs_to_confirm(yuv_txs).await?;
 
         Ok(true)
     }
 
-    async fn get_raw_yuv_transaction(&self, txid: Txid) -> RpcResult<GetRawYuvTransactionResponse> {
-        if let Some(state) = self.txs_states_storage.get(&txid).await {
-            return match state {
-                TxState::Pending => Ok(GetRawYuvTransactionResponse::Pending),
-                TxState::Checked => Ok(GetRawYuvTransactionResponse::Checked),
-            };
+    async fn get_raw_yuv_transaction(
+        &self,
+        txid: Txid,
+    ) -> RpcResult<GetRawYuvTransactionResponseJson> {
+        let mempool_entry = self
+            .state_storage
+            .get_mempool_entry(&txid)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get mempool entry: {e}");
+                ErrorObject::owned(
+                    INTERNAL_ERROR_CODE,
+                    "Storage is not available",
+                    Option::<Vec<u8>>::None,
+                )
+            })?;
+
+        if let Some(entry) = mempool_entry {
+            return Ok(GetRawYuvTransactionResponseJson::new(
+                YuvTransactionStatus::Pending,
+                Some(entry.yuv_tx.into()),
+            ));
         }
 
         let tx = self.txs_storage.get_yuv_tx(&txid).await.map_err(|e| {
@@ -140,15 +196,58 @@ where
         })?;
 
         match tx {
-            Some(tx) => Ok(GetRawYuvTransactionResponse::Attached(tx)),
-            None => Ok(GetRawYuvTransactionResponse::None),
+            Some(tx) => Ok(GetRawYuvTransactionResponseJson::new(
+                YuvTransactionStatus::Attached,
+                Some(tx.into()),
+            )),
+            None => Ok(GetRawYuvTransactionResponseJson::new(
+                YuvTransactionStatus::None,
+                None,
+            )),
+        }
+    }
+
+    async fn get_yuv_transaction(&self, txid: Txid) -> RpcResult<GetRawYuvTransactionResponseHex> {
+        let mempool_entry = self
+            .state_storage
+            .get_mempool_entry(&txid)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get mempool entry: {e}");
+                ErrorObject::owned(
+                    INTERNAL_ERROR_CODE,
+                    "Storage is not available",
+                    Option::<Vec<u8>>::None,
+                )
+            })?;
+
+        if let Some(entry) = mempool_entry {
+            return Ok(GetRawYuvTransactionResponseHex::new(
+                entry.status.into(),
+                Some(entry.yuv_tx.into()),
+            ));
+        }
+
+        let tx = self.txs_storage.get_yuv_tx(&txid).await.map_err(|e| {
+            ErrorObject::owned(INTERNAL_ERROR_CODE, e.to_string(), Option::<Vec<u8>>::None)
+        })?;
+
+        match tx {
+            Some(tx) => Ok(GetRawYuvTransactionResponseHex::new(
+                YuvTransactionStatus::Attached,
+                Some(tx.into()),
+            )),
+            None => Ok(GetRawYuvTransactionResponseHex::new(
+                YuvTransactionStatus::None,
+                None,
+            )),
         }
     }
 
     async fn get_list_raw_yuv_transactions(
         &self,
         txids: Vec<Txid>,
-    ) -> RpcResult<Vec<YuvTransaction>> {
+    ) -> RpcResult<Vec<YuvTransactionResponse>> {
         if txids.len() > self.max_items_per_request {
             return Err(ErrorObject::owned(
                 INVALID_REQUEST_CODE,
@@ -168,8 +267,32 @@ where
             })?;
 
             if let Some(tx) = tx {
-                result.push(tx)
+                result.push(tx.into())
             };
+        }
+
+        Ok(result)
+    }
+
+    async fn get_list_yuv_transactions(
+        &self,
+        txids: Vec<Txid>,
+    ) -> RpcResult<Vec<GetRawYuvTransactionResponseHex>> {
+        if txids.len() > self.max_items_per_request {
+            return Err(ErrorObject::owned(
+                INVALID_REQUEST_CODE,
+                format!(
+                    "Too many txids, max amount is {}",
+                    self.max_items_per_request
+                ),
+                Option::<Vec<u8>>::None,
+            ));
+        }
+
+        let mut result: Vec<GetRawYuvTransactionResponseHex> = Vec::new();
+
+        for txid in txids {
+            result.push(self.get_yuv_transaction(txid).await?)
         }
 
         Ok(result)
@@ -220,7 +343,41 @@ where
         Ok(res)
     }
 
-    /// Send provided signed YUV transaction to Bitcoin network and validated it after it confirmed.
+    /// Send signed YUV transaction to Bitcoin network and validate it after it's confirmed.
+    async fn send_yuv_tx(&self, yuv_tx: String, max_burn_amount: Option<u64>) -> RpcResult<bool> {
+        let max_burn_amount_btc: Option<f64> = max_burn_amount
+            .map(|max_burn_amount_sat| Amount::from_sat(max_burn_amount_sat).to_btc());
+
+        let yuv_tx = YuvTransaction::from_hex(yuv_tx).map_err(|err| {
+            tracing::error!("Failed to parse YUV tx hex: {err}");
+            ErrorObjectOwned::owned(
+                INVALID_REQUEST_CODE,
+                "Hex parse error",
+                Option::<Vec<u8>>::None,
+            )
+        })?;
+
+        self.bitcoin_client
+            .send_raw_transaction_opts(&yuv_tx.bitcoin_tx, None, max_burn_amount_btc)
+            .await
+            .map_err(|err| {
+                tracing::error!("Failed to send transaction to Bitcoin network: {err}");
+                ErrorObjectOwned::owned(
+                    INTERNAL_ERROR_CODE,
+                    "Service is dead",
+                    Option::<Vec<u8>>::None,
+                )
+            })?;
+
+        // Send message to message handler to wait its confirmation.
+        self.send_txs_to_confirm(vec![yuv_tx]).await?;
+
+        Ok(true)
+    }
+
+    /// Send signed raw YUV transaction to Bitcoin network and validate it after it's confirmed.
+    ///
+    /// NOTE: this method will soon accept only hex encoded YUV txs.
     async fn send_raw_yuv_tx(
         &self,
         yuv_tx: YuvTransaction,
@@ -248,8 +405,8 @@ where
     }
 
     async fn is_yuv_txout_frozen(&self, txid: Txid, vout: u32) -> RpcResult<bool> {
-        let frozen_state = self
-            .announcement_storage
+        let freeze_entry = self
+            .state_storage
             .get_frozen_tx(&OutPoint::new(txid, vout))
             .await
             .map_err(|e| {
@@ -261,11 +418,7 @@ where
                 )
             })?;
 
-        let Some(frozen_entry) = frozen_state else {
-            return Ok(false);
-        };
-
-        Ok(frozen_entry.is_frozen())
+        Ok(freeze_entry.is_some())
     }
 
     /// Check that transaction could be accpeted by node.
@@ -277,7 +430,7 @@ where
         yuv_tx: YuvTransaction,
     ) -> RpcResult<EmulateYuvTransactionResponse> {
         let emulator =
-            TransactionEmulator::new(self.txs_storage.clone(), self.announcement_storage.clone());
+            TransactionEmulator::new(self.txs_storage.clone(), self.state_storage.clone());
 
         match emulator.emulate_yuv_transaction(&yuv_tx).await {
             // Transaction could be accepted by node.
@@ -300,7 +453,7 @@ where
     }
 
     async fn get_chroma_info(&self, chroma: Chroma) -> RpcResult<Option<ChromaInfo>> {
-        self.announcement_storage
+        self.state_storage
             .get_chroma_info(&chroma)
             .await
             .map_err(|e| {
@@ -318,7 +471,7 @@ where
 /// this checks:
 ///
 /// 1. All proofs are valid for this transaction;
-/// 2. Transaction is not violating any consideration rules;
+/// 2. Transaction is not violating any conservation rules;
 /// 3. None of the inputs are already frozen;
 /// 4. That all parents are already attached in internal node storage.
 ///
@@ -418,23 +571,16 @@ where
 
     /// Check if parent UTXO is frozen or not.
     async fn is_parent_frozen(&self, parent: OutPoint) -> Result<(), EmulateYuvTransactionError> {
-        let frozen_entry = self
-            .frozen_txs_storage
-            .get_frozen_tx(&OutPoint::new(parent.txid, parent.vout))
-            .await?;
+        let freeze_entry = self.frozen_txs_storage.get_frozen_tx(&parent).await?;
 
-        let Some(frozen_entry) = frozen_entry else {
-            return Ok(());
-        };
-
-        if frozen_entry.is_frozen() {
-            return Err(EmulateYuvTransactionError::ParentTransactionFrozen {
+        if freeze_entry.is_some() {
+            Err(EmulateYuvTransactionError::ParentTransactionFrozen {
                 txid: parent.txid,
                 vout: parent.vout,
-            });
+            })
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 }
 

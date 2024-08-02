@@ -72,7 +72,7 @@ impl AnnouncementsIndexer {
 
         if !txs.is_empty() {
             self.event_bus
-                .send(ControllerMessage::ConfirmBatchTx(txs))
+                .send(ControllerMessage::InitializeTxs(txs))
                 .await;
         }
 

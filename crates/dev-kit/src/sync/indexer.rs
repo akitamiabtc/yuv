@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use bdk::miniscript::ToPublicKey;
 use bitcoin::{OutPoint, PublicKey};
 use eyre::Context;
-use futures::future::join_all;
 use yuv_pixels::PixelProof;
 use yuv_rpc_api::transactions::YuvTransactionsRpcClient;
 use yuv_storage::{PagesNumberStorage, TransactionsStorage};
@@ -63,12 +62,6 @@ where
             .saturating_sub(1);
 
         self.user_outpoints = self.txs_storage.get_unspent_yuv_outpoints().await?;
-
-        self.indexed_txs = self
-            .user_outpoints
-            .keys()
-            .map(|outpoint| (*outpoint, false))
-            .collect();
 
         loop {
             let txs = self
@@ -201,49 +194,30 @@ where
 
     /// Clean up transaction that are spent, and not owned by user
     async fn cleanup(&mut self) -> eyre::Result<Vec<(OutPoint, PixelProof)>> {
-        const BATCH_SIZE: usize = 80;
-
         let mut utxos = Vec::new();
-        let node_client = &self.node_client;
-        let txs_storage = &self.txs_storage;
-        let user_outpoints = &self.user_outpoints;
 
-        for chunk in self
-            .indexed_txs
-            .iter()
-            .collect::<Vec<_>>()
-            .chunks(BATCH_SIZE)
-        {
-            let futures = chunk.iter().map(|(&outpoint, &is_spent)| async move {
-                if is_spent {
-                    return None;
-                }
+        for (outpoint, is_spent) in &self.indexed_txs {
+            if *is_spent {
+                // FIXME:
+                // self.txs_storage.delete_yuv_tx(outpoint.txid).await?;
+                continue;
+            }
 
-                let is_outpoint_frozen = match node_client
-                    .is_yuv_txout_frozen(outpoint.txid, outpoint.vout)
-                    .await
-                {
-                    Ok(frozen) => frozen,
-                    Err(e) => {
-                        tracing::error!("Failed to check if outpoint is frozen: {:?}", e);
-                        return None;
-                    }
-                };
+            let is_outpoint_frozen = self
+                .node_client
+                .is_yuv_txout_frozen(outpoint.txid, outpoint.vout)
+                .await?;
 
-                if is_outpoint_frozen {
-                    if let Err(e) = txs_storage.delete_yuv_tx(&outpoint.txid).await {
-                        tracing::error!("Failed to delete YUV transaction: {:?}", e);
-                    }
-                    return None;
-                }
+            if is_outpoint_frozen {
+                self.txs_storage.delete_yuv_tx(&outpoint.txid).await?;
+                continue;
+            }
 
-                user_outpoints
-                    .get(&outpoint)
-                    .map(|proof| (outpoint, proof.clone()))
-            });
+            let Some(proof) = self.user_outpoints.get(outpoint) else {
+                continue;
+            };
 
-            let batch_results = join_all(futures).await;
-            utxos.extend(batch_results.into_iter().flatten());
+            utxos.push((*outpoint, proof.clone()));
         }
 
         Ok(utxos)

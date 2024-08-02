@@ -6,7 +6,7 @@ extern crate core;
 pub use announcements::{Announcement, AnyAnnouncement};
 #[cfg(all(feature = "messages", feature = "std"))]
 pub use messages::{
-    ControllerMessage, ControllerP2PMessage, GraphBuilderMessage, TxCheckerMessage,
+    ControllerMessage, ControllerP2PMessage, GraphBuilderMessage, IndexerMessage, TxCheckerMessage,
     TxConfirmMessage,
 };
 #[cfg(feature = "bulletproof")]

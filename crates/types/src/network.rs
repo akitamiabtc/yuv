@@ -1,13 +1,11 @@
 use bitcoin::network::Magic;
 use core::{fmt::Display, str::FromStr};
 
-use bitcoin::{BlockHash, Network as BitcoinNetwork};
-
 use alloc::string::String;
+use bitcoin::{BlockHash, Network as BitcoinNetwork};
 
 /// Mutiny network magic.
 pub const MUTINY_MAGIC: [u8; 4] = [0xCB, 0x2D, 0xDF, 0xA5];
-
 /// YUV genesis block for `Mainnet`.
 const MAINNET_GENESIS_BLOCK: &str =
     "00000000000000000000cde86faf8ea6994e4ca31ed351e55912f617f5dd8ee8";

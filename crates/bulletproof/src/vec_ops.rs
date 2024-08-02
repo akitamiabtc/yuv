@@ -29,8 +29,6 @@ where
 
     /// Calculate the weighted inner product of three vectors.
     fn wip(&self, vec1: &Self, vec2: &Self) -> Self::Value;
-    /// Calculate the inner product of two vectors.
-    fn inner_product(&self, vec: &Self) -> Self::Value;
     /// Split a vector into two vectors.
     fn split(&mut self) -> (Self, Self);
 }
@@ -86,10 +84,6 @@ impl VecOps for Vec<k256::Scalar> {
             .zip(vec2)
             .map(|((v1, v2), v3)| v1 * v2 * v3)
             .sum()
-    }
-
-    fn inner_product(&self, vec: &Self) -> Self::Value {
-        self.iter().zip(vec).map(|(v1, v2)| v1 * v2).sum()
     }
 
     fn split(&mut self) -> (Self, Self) {

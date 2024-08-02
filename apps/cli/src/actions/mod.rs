@@ -1,21 +1,17 @@
 use std::path::PathBuf;
 
 use crate::actions::chroma::ChromaCommands;
+use burn::BurnArgs;
 use clap::{Parser, Subcommand};
+use clap_verbosity::Verbosity;
 use color_eyre::eyre;
-use log::LevelFilter;
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use decode::DecodeArgs;
+use get::GetArgs;
+use tracing_log::AsTrace;
 
 use self::{
-    convert::ConvertCommands,
-    freeze::{FreezeArgs, UnfreezeArgs},
-    generate::GenerateCommands,
-    get::GetArgs,
-    issue::IssueArgs,
-    provide::ProvideArgs,
-    transfer::TransferArgs,
-    utxos::UtxosArgs,
-    validate::ValidateArgs,
+    convert::ConvertCommands, freeze::FreezeArgs, generate::GenerateCommands, issue::IssueArgs,
+    provide::ProvideArgs, transfer::TransferArgs, utxos::UtxosArgs, validate::ValidateArgs,
     wallet::WalletCommands,
 };
 use crate::context::Context;
@@ -24,8 +20,10 @@ mod announcement_args;
 mod balances;
 #[cfg(feature = "bulletproof")]
 mod bulletproof;
+mod burn;
 mod chroma;
 mod convert;
+mod decode;
 mod freeze;
 mod generate;
 mod get;
@@ -44,9 +42,8 @@ mod wallet;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Verbosity level
-    #[clap(short, long)]
-    pub verbose: bool,
+    #[command(flatten)]
+    pub verbosity: Verbosity,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -74,6 +71,12 @@ pub enum Commands {
     /// Transfer tokens
     Transfer(TransferArgs),
 
+    /// Burn tokens
+    Burn(BurnArgs),
+
+    /// Decode raw YUV transaction
+    Decode(DecodeArgs),
+
     /// Sweep tweaked Bitcoin UTXOs created with the YUV protocol.
     /// Outputs will be sweeped to a p2wpkh address.
     Sweep,
@@ -84,13 +87,10 @@ pub enum Commands {
     /// Send freeze transaction
     Freeze(FreezeArgs),
 
-    /// Send unfreeze transaction
-    Unfreeze(UnfreezeArgs),
-
     /// Provide proof to node
     Provide(ProvideArgs),
 
-    /// Get transaction from node
+    /// Get transaction data from node
     Get(GetArgs),
 
     /// Get a list of unspent transaction outputs with amounts
@@ -119,20 +119,9 @@ pub enum Commands {
 
 impl Cli {
     pub async fn run(self) -> eyre::Result<()> {
-        if self.verbose {
-            let level_filter = if cfg!(debug_assertions) {
-                LevelFilter::Debug
-            } else {
-                LevelFilter::Info
-            };
-
-            TermLogger::init(
-                level_filter,
-                simplelog::Config::default(),
-                TerminalMode::Stdout,
-                ColorChoice::Auto,
-            )?;
-        }
+        tracing_subscriber::fmt()
+            .with_max_level(self.verbosity.log_level_filter().as_trace())
+            .init();
 
         let context = Context::new(self.config);
         execute_command(self.command, context).await
@@ -145,9 +134,9 @@ async fn execute_command(command: Commands, context: Context) -> eyre::Result<()
         Cmd::Generate(cmd) => generate::run(cmd, context),
         Cmd::Issue(args) => issue::run(args, context).await,
         Cmd::Transfer(args) => transfer::run(args, context).await,
+        Cmd::Burn(args) => burn::run(args, context).await,
         Cmd::Validate(args) => validate::run(args, context).await,
         Cmd::Freeze(args) => freeze::run(args, context).await,
-        Cmd::Unfreeze(args) => freeze::run(args, context).await,
         Cmd::Provide(args) => provide::run(args, context).await,
         Cmd::Get(args) => get::run(args, context).await,
         Cmd::Balances => balances::run(context).await,
@@ -160,6 +149,7 @@ async fn execute_command(command: Commands, context: Context) -> eyre::Result<()
         Cmd::P2TR => p2tr::run(context),
         Cmd::Sweep => sweep::run(context).await,
         Cmd::Chroma(cmd) => chroma::run(cmd, context).await,
+        Cmd::Decode(args) => decode::run(args).await,
     }
 }
 

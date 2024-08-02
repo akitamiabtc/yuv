@@ -8,14 +8,15 @@ repository.workspace = true
 
 [dependencies]
 event-bus = { path = "../event-bus" }
-yuv-types = { path = "../types" }
+yuv-types = { path = "../types", features = ["consensus"] }
 yuv-pixels = { path = "../pixels" }
 yuv-storage = { path = "../storage" }
-yuv-rpc-api = { path = "../rpc-api" }
+yuv-rpc-api = { path = "../rpc-api", features = ["server"], default-features = false }
 yuv-tx-check = { path = "../tx-check" }
 bitcoin-client = { path = "../bitcoin-client" }
 
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 bitcoin = { workspace = true }

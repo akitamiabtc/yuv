@@ -3,9 +3,7 @@
 //!
 //! ## Handling of reverted blocks
 
-use bitcoin::{
-    locktime::absolute::Height, network::constants::ServiceFlags, Block, BlockHash, Txid,
-};
+use bitcoin::{BlockHash, Txid};
 use std::collections::HashMap;
 
 use std::net::SocketAddr;
@@ -46,17 +44,7 @@ impl std::fmt::Display for Event {
 /// Inventory manager peer.
 #[derive(Debug)]
 pub struct Peer {
-    /// Is this peer a transaction relay?
-    pub relay: bool,
-    /// Peer announced services.
-    pub services: ServiceFlags,
-    /// Whether this peer use BIP-339
-    pub wtxidrelay: bool,
-    /// Whether this peer use YUV protocol
-    pub ytxidrelay: bool,
-
     /// Number of times a certain block was requested.
-    #[allow(dead_code)]
     requests: HashMap<BlockHash, usize>,
 
     /// Peer socket.
@@ -75,10 +63,6 @@ impl Peer {
 pub struct InventoryManager<U> {
     /// Peer map.
     peers: AddressBook<PeerId, Peer>,
-    /// Blocks requested and the time at which they were last requested.
-    pub remaining: HashMap<BlockHash, Option<LocalTime>>,
-    /// Blocks received, waiting to be processed.
-    pub received: HashMap<Height, Block>,
 
     last_tick: Option<LocalTime>,
     upstream: U,
@@ -89,32 +73,19 @@ impl<U: Wire<Event> + SetTimer> InventoryManager<U> {
     pub fn new(upstream: U) -> Self {
         Self {
             peers: AddressBook::new(),
-            remaining: HashMap::new(),
-            received: HashMap::new(),
             last_tick: None,
             upstream,
         }
     }
 
     /// Called when a peer is negotiated.
-    pub fn peer_negotiated(
-        &mut self,
-        socket: Socket,
-        services: ServiceFlags,
-        relay: bool,
-        wtxidrelay: bool,
-        ytxidrelay: bool,
-    ) {
+    pub fn peer_negotiated(&mut self, socket: Socket) {
         self.schedule_tick();
         self.peers.insert(
             socket.addr,
             Peer {
-                services,
-                relay,
                 requests: HashMap::new(),
                 _socket: socket,
-                wtxidrelay,
-                ytxidrelay,
             },
         );
     }

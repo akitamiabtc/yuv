@@ -2,6 +2,7 @@
 
 use bitcoin::BlockHash;
 use bitcoin_client::{json::GetBlockTxResult, BitcoinRpcApi, BitcoinRpcClient};
+use event_bus::{typeid, EventBus};
 use eyre::{bail, Context};
 use futures::TryFutureExt;
 use std::sync::Arc;
@@ -10,8 +11,8 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-use yuv_storage::{BlockIndexerStorage, IsIndexedStorage};
-use yuv_types::{network::Network, DEFAULT_CONFIRMATIONS_NUMBER};
+use yuv_storage::BlockIndexerStorage;
+use yuv_types::{ControllerMessage, IndexerMessage};
 
 use crate::{
     blockloader::{BlockLoaderConfig, IndexBlocksEvent},
@@ -31,44 +32,40 @@ const RESTART_ATTEMPT_INTERVAL: Duration = Duration::from_secs(10);
 /// Using polling indexes blocks from Bitcoin and broadcasts it to inner indexers.
 pub struct BitcoinBlockIndexer<BS, BC>
 where
-    BS: BlockIndexerStorage + IsIndexedStorage,
+    BS: BlockIndexerStorage,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
     /// Bitcoin RPC Client.
     bitcoin_client: Arc<BC>,
     /// Storage for block indexer.
     storage: BS,
-    /// Bitcoin network
-    network: Network,
     /// Subindexers for block indexer.
     subindexers: Vec<Box<dyn Subindexer>>,
-    /// Contains the number of confirmations required to consider a block as confirmed.
-    confirmation_number: u8,
     /// Contains the height of the best confirmed block.
     confirmed_block_height: usize,
     /// Contains the hash of the best confirmed block.
     confirmed_block_hash: Option<BlockHash>,
+    /// Event bus for receiving messages about the blockchain reorganization.
+    event_bus: EventBus,
 }
 
 impl<BS, BC> BitcoinBlockIndexer<BS, BC>
 where
-    BS: BlockIndexerStorage + IsIndexedStorage + Send + Sync + 'static,
+    BS: BlockIndexerStorage + Send + Sync + 'static,
     BC: BitcoinRpcApi + Send + Sync + 'static,
 {
-    pub fn new(
-        bitcoin_client: Arc<BC>,
-        storage: BS,
-        confirmation_number: Option<u8>,
-        network: Network,
-    ) -> Self {
+    pub fn new(bitcoin_client: Arc<BC>, storage: BS, event_bus: &EventBus) -> Self {
+        let event_bus = event_bus
+            .extract(&typeid![ControllerMessage], &typeid![IndexerMessage])
+            .expect("event channels must be presented");
+
         Self {
             bitcoin_client,
             storage,
             subindexers: Vec::new(),
-            confirmation_number: confirmation_number.unwrap_or(DEFAULT_CONFIRMATIONS_NUMBER),
             confirmed_block_height: 0,
             confirmed_block_hash: None,
-            network,
+            event_bus,
         }
     }
 
@@ -89,9 +86,13 @@ where
         params: IndexingParams,
         block_loader_config: BlockLoaderConfig,
         bitcoin_client: Arc<BitcoinRpcClient>,
+        confirmations_number: usize,
         cancellation: CancellationToken,
     ) -> eyre::Result<()> {
-        let starting_block_height = self.get_starting_block_height(&params).await?;
+        let starting_block_height = self
+            .get_starting_block_height(&params)
+            .await?
+            .saturating_sub(confirmations_number - 1);
 
         tracing::info!(
             from_height = starting_block_height.saturating_sub(1),
@@ -102,7 +103,6 @@ where
             bitcoin_client,
             block_loader_config.workers_number,
             block_loader_config.chunk_size,
-            self.confirmation_number,
         );
 
         let (sender_to_indexer, rx_indexer) = mpsc::channel(LOADED_BLOCKS_CHANNEL_SIZE);
@@ -160,8 +160,6 @@ where
             "Finished initial blocks indexing",
         );
 
-        self.storage.put_is_indexed().await?;
-
         Ok(())
     }
 
@@ -170,25 +168,7 @@ where
     /// Returns `last_indexed_height` if `starting_block_hash` is not provided
     /// and vice versa
     async fn get_starting_block_height(&self, params: &IndexingParams) -> eyre::Result<usize> {
-        // Starting block height depends on the YUV genesis block for the given network.
-        // If the genesis block is not defined for the given network, e.g. `network::Regtest`,
-        // the height is set to 0.
-        let mut starting_block_height =
-            if let Some(starting_block_by_network) = self.network.yuv_genesis_block() {
-                self.bitcoin_client
-                    .get_block_info(&starting_block_by_network)
-                    .await?
-                    .block_data
-                    .height
-            } else {
-                0
-            };
-
-        // Bugfix: this is a temporary condition that requires all the nodes to reindex the chain from the genesis block.
-        // TODO: remove this check in the future.
-        if self.storage.get_is_indexed().await?.is_none() {
-            return Ok(starting_block_height);
-        }
+        let mut starting_block_height = 0;
 
         if let Some(last_indexed_hash) = self.storage.get_last_indexed_hash().await? {
             let last_indexed_height = self.get_block_height(&last_indexed_hash).await?;
@@ -209,9 +189,20 @@ where
 
         let mut timer = time::interval(params.polling_period);
         let mut restart_number = 0;
+        let events = self.event_bus.subscribe::<IndexerMessage>();
 
         loop {
             tokio::select! {
+                event_received = events.recv() => {
+                    let Ok(event) = event_received else {
+                        tracing::trace!("All incoming event senders are dropped");
+                        return;
+                    };
+
+                    if let Err(err) = self.handle_event(event).await {
+                        tracing::error!("Failed to handle an event: {}", err);
+                    }
+                },
                 _ = timer.tick() => {},
                 _ = cancellation.cancelled() => {
                     tracing::trace!("Cancellation received, stopping indexer");
@@ -247,6 +238,31 @@ where
         }
 
         cancellation.cancel()
+    }
+
+    async fn handle_event(&mut self, event: IndexerMessage) -> eyre::Result<()> {
+        use IndexerMessage as Message;
+        tracing::trace!("New event: {:?}", event);
+
+        match event {
+            Message::Reorganization(height) => self.handle_reorganization(height).await?,
+        }
+
+        Ok(())
+    }
+
+    async fn handle_reorganization(&mut self, new_height: usize) -> eyre::Result<()> {
+        tracing::info!(
+            "Changing indexing height from {} to {}",
+            self.confirmed_block_height,
+            new_height
+        );
+
+        self.confirmed_block_height = new_height;
+        let block = self.get_block_by_height(new_height as u64).await?;
+        self.confirmed_block_hash = Some(block.block_data.hash);
+
+        Ok(())
     }
 
     /// Index blocks from [`BlockLoader`]. It appears in `Indexer` init function. Handles blocks
@@ -340,64 +356,37 @@ where
     ///
     /// [confirmed block height]: BitcoinBlockIndexer::check_new_confirmed_block
     async fn handle_new_blocks(&mut self) -> eyre::Result<()> {
-        loop {
-            if !self.check_new_confirmed_block().await? {
-                break;
-            }
-
-            let block = self
-                .get_block_by_height(self.confirmed_block_height as u64 + 1)
-                .await
-                .wrap_err("failed to get block by hash")?;
-
-            let confirmed_block_hash = self.confirmed_block_hash;
-            let new_block_previous_hash = block.block_data.previousblockhash;
-            let new_block_hash = block.block_data.hash;
-            let new_block_height = block.block_data.height;
-
-            if confirmed_block_hash != new_block_previous_hash {
-                bail!(
-                    "Latest confirmed block is not a parent of the next block to index. Possibly \
-                    the confirmation number is too low and reorg happened. Confirmed block hash: \
-                    {:?}, new confirmed block previous hash: {:?}, next block hash: {:?}",
-                    confirmed_block_hash,
-                    new_block_previous_hash,
-                    new_block_hash,
-                );
-            }
-
-            tracing::trace!(
-                height = ?new_block_height,
-                hash = ?new_block_hash,
-                "New confirmed block",
-            );
-
-            self.index_block(&block).await?;
-
-            self.confirmed_block_height = new_block_height;
-            self.confirmed_block_hash = Some(new_block_hash);
+        let best_block_height = self.bitcoin_client.get_block_count().await?;
+        if best_block_height == self.confirmed_block_height as u64 {
+            return Ok(());
         }
 
+        let block = self
+            .get_block_by_height(self.confirmed_block_height as u64 + 1)
+            .await
+            .wrap_err("failed to get block by hash")?;
+
+        if let Some(last_indexed_block_hash) = self.confirmed_block_hash {
+            if last_indexed_block_hash == block.block_data.hash {
+                return Ok(());
+            }
+        }
+
+        let new_block_hash = block.block_data.hash;
+        let new_block_height = block.block_data.height;
+
+        tracing::trace!(
+            height = ?new_block_height,
+            hash = ?new_block_hash,
+            "New confirmed block",
+        );
+
+        self.index_block(&block).await?;
+
+        self.confirmed_block_height = new_block_height;
+        self.confirmed_block_hash = Some(new_block_hash);
+
         Ok(())
-    }
-
-    /// Check if there is a block with height [confirmed block height] + [confirmation number], that
-    /// means there is a new confirmed block.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(true)` if there is a new confirmed block.
-    /// - `Ok(false)` if there is no new confirmed block.
-    ///
-    /// [confirmation number]: BitcoinBlockIndexer::confirmation_number
-    /// [confirmed block height]: BitcoinBlockIndexer::confirmed_block_height
-    async fn check_new_confirmed_block(&self) -> eyre::Result<bool> {
-        let new_confirmation_height =
-            self.confirmed_block_height + self.confirmation_number as usize;
-
-        let best_block_height = self.bitcoin_client.get_block_count().await?;
-
-        Ok(new_confirmation_height <= best_block_height as usize)
     }
 
     /// Returns the best block height by block hash.

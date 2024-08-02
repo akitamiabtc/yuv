@@ -3,13 +3,14 @@ use std::time::Duration;
 use bitcoin::BlockHash;
 use serde::Deserialize;
 use yuv_indexers::{BlockLoaderConfig, IndexingParams};
+use yuv_types::DEFAULT_CONFIRMATIONS_NUMBER;
 
 pub const DEFAULT_POLLING_PERIOD: Duration = Duration::from_secs(5);
 
 /// One day:
 pub const DEFAULT_MAX_CONFIRMATION_TIME: Duration = Duration::from_secs(60 * 60 * 24);
 /// Default interval of checking if the transactions that are waiting for the confirmation should be deleted from the queue.
-pub const DEFAULT_CLEAN_UP_INTERVAL: Duration = Duration::from_secs(30);
+pub const DEFAULT_CLEAN_UP_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Default interval between attempts of restarting the indexer.
 pub const DEFAULT_RESTART_INTERVAL: Duration = Duration::from_secs(5);
@@ -39,8 +40,8 @@ pub struct IndexerConfig {
     #[serde(default = "default_max_restart_attempts")]
     pub max_restart_attempts: u32,
 
-    #[serde(default)]
-    pub confirmations_number: Option<u8>,
+    #[serde(default = "default_confirmations_number")]
+    pub confirmations_number: u8,
 }
 
 fn default_polling_period() -> Duration {
@@ -61,6 +62,10 @@ fn default_max_restart_attempts() -> u32 {
 
 fn default_clean_up_interval() -> Duration {
     DEFAULT_CLEAN_UP_INTERVAL
+}
+
+fn default_confirmations_number() -> u8 {
+    DEFAULT_CONFIRMATIONS_NUMBER
 }
 
 impl From<IndexerConfig> for IndexingParams {

@@ -14,7 +14,9 @@ pub use errors::{
 };
 pub use hash::PixelHash;
 pub use keys::{PixelKey, PixelPrivateKey, ToEvenPublicKey};
-pub use pixel::{Chroma, Luma, Pixel, BLINDING_FACTOR_SIZE, CHROMA_SIZE, LUMA_SIZE, PIXEL_SIZE};
+pub use pixel::{
+    Chroma, Luma, Pixel, BLINDING_FACTOR_SIZE, CHROMA_SIZE, LUMA_SIZE, PIXEL_SIZE, ZERO_PUBLIC_KEY,
+};
 pub use proof::{
     htlc::{HtlcScriptKind, LightningHtlcData, LightningHtlcProof, LightningHtlcScript},
     CheckableProof, EmptyPixelProof, LightningCommitmentProof, LightningCommitmentWitness,
@@ -41,10 +43,10 @@ mod proof;
 mod script;
 mod tweakable;
 
-#[cfg(feature = "serde")]
+#[cfg(all(feature = "serde", feature = "bulletproof"))]
 pub(crate) struct HexVisitor;
 
-#[cfg(feature = "serde")]
+#[cfg(all(feature = "serde", feature = "bulletproof"))]
 impl<'de> serde::de::Visitor<'de> for HexVisitor {
     type Value = alloc::string::String;
 

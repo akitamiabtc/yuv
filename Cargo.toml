@@ -1,6 +1,6 @@
 [workspace.package]
 edition = "2021"
-version = "0.3.0"
+version = "0.3.4"
 license = "Apache-2.0"
 repository = "https://github.com/akitamiabtc/yuv"
 
@@ -55,6 +55,7 @@ hex = { version = "0.4.3" }
 mockall = { version = "0.12.0" }
 ciborium = { version = "0.2.2" }
 color-eyre = { version = "0.6.2" }
+once_cell = { version = "1.18.0" }
 
 [workspace.dependencies.config]
 version = "0.13.3"

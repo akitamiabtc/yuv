@@ -1,13 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
 
 use bitcoin::{OutPoint, TxIn, Txid};
-use bitcoin_client::BitcoinRpcApi;
 use event_bus::{typeid, EventBus};
-use eyre::{eyre, Context, Result};
-use tokio::time::sleep;
+use eyre::{Context, Result};
+
 use tokio_util::sync::CancellationToken;
 
 use yuv_pixels::{Chroma, PixelProof};
@@ -22,33 +19,16 @@ use yuv_types::{
     YuvTransaction, YuvTxType,
 };
 
+use crate::check_transaction;
 use crate::errors::CheckError;
-use crate::isolated_checks::{
-    check_issue_isolated, check_transfer_isolated, find_owner_in_txinputs,
-};
-
-const ATTEMPT_INTERVAL: Duration = Duration::from_secs(5);
-const MAX_RETRY_ATTEMPTS: usize = 3;
-
-pub struct Config<TxsStorage, StateStorage, BC> {
-    pub full_event_bus: EventBus,
-    pub txs_storage: TxsStorage,
-    pub state_storage: StateStorage,
-    pub bitcoin_client: Arc<BC>,
-}
+use crate::isolated_checks::find_owner_in_txinputs;
 
 /// Async implementation of [`TxChecker`] for node implementation.
 ///
 /// Accepts [`YuvTransaction`]s from channel, check them and sends to graph builder.
 ///
 /// [`TxChecker`]: struct.TxChecker.html
-pub struct TxCheckerWorker<TxsStorage, StateStorage, BC>
-where
-    BC: BitcoinRpcApi + Send + Sync + 'static,
-{
-    /// Index of the worker in the worker pool
-    index: usize,
-
+pub struct TxChecker<TxsStorage, StateStorage> {
     /// Inner storage of already checked and attached transactions.
     pub(crate) txs_storage: TxsStorage,
 
@@ -57,19 +37,15 @@ where
 
     /// Event bus for simplifying communication with services
     event_bus: EventBus,
-
-    bitcoin_client: Arc<BC>,
 }
 
-impl<TS, SS, BC> TxCheckerWorker<TS, SS, BC>
+impl<TS, SS> TxChecker<TS, SS>
 where
     TS: TransactionsStorage + Clone + Send + Sync + 'static,
     SS: InvalidTxsStorage + FrozenTxsStorage + ChromaInfoStorage + Clone + Send + Sync + 'static,
-    BC: BitcoinRpcApi + Send + Sync + 'static,
 {
-    pub fn from_config(config: &Config<TS, SS, BC>, index: Option<usize>) -> Self {
-        let event_bus = config
-            .full_event_bus
+    pub fn new(full_event_bus: EventBus, txs_storage: TS, state_storage: SS) -> Self {
+        let event_bus = full_event_bus
             .extract(
                 &typeid![GraphBuilderMessage, ControllerMessage],
                 &typeid![TxCheckerMessage],
@@ -77,11 +53,9 @@ where
             .expect("event channels must be presented");
 
         Self {
-            index: index.unwrap_or_default(),
             event_bus,
-            txs_storage: config.txs_storage.clone(),
-            state_storage: config.state_storage.clone(),
-            bitcoin_client: Arc::clone(&config.bitcoin_client),
+            txs_storage,
+            state_storage,
         }
     }
 
@@ -92,12 +66,12 @@ where
             tokio::select! {
                 event_received = events.recv() => {
                     let Ok(event) = event_received else {
-                        tracing::trace!(index = self.index, "All incoming events senders are dropped");
+                        tracing::trace!("All incoming events senders are dropped");
                         return;
                     };
 
                     if let Err(err) = self.handle_event(event).await {
-                        tracing::error!(index = self.index, "Failed to handle an event: {}", err);
+                        tracing::error!("Failed to handle an event: {}", err);
 
                         // Error usually occurs when there is no connection established with the
                         // Bitcoin RPC. In this case the node should gracefully shutdown.
@@ -105,7 +79,7 @@ where
                     }
                 }
                 _ = cancellation.cancelled() => {
-                    tracing::trace!(index = self.index, "Cancellation received, stopping TxCheckerWorker");
+                    tracing::trace!("Cancellation received, stopping TxCheckerWorker");
                     return;
                 }
             }
@@ -114,10 +88,14 @@ where
 
     async fn handle_event(&mut self, event: TxCheckerMessage) -> Result<()> {
         match event {
-            TxCheckerMessage::NewTxs { txs, sender } => self
-                .check_txs(txs, sender)
+            TxCheckerMessage::FullCheck(txs) => self
+                .check_txs_full(txs)
                 .await
-                .wrap_err("failed to check transactions")?,
+                .wrap_err("failed to perform the full check of transactions")?,
+            TxCheckerMessage::IsolatedCheck(txs) => self
+                .check_txs_isolated(txs)
+                .await
+                .wrap_err("failed to perform the isolated check of transactions")?,
         }
 
         Ok(())
@@ -127,21 +105,22 @@ where
     /// transactions or request missing parent transactions (in case of [`YuvTxType::Transfer`]).
     /// It also sends valid [`YuvTxType::Issue`] and [`YuvTxType::Transfer`]
     /// transactions to the graph builder.
-    pub async fn check_txs(
+    pub async fn check_txs_full(
         &mut self,
-        txs: Vec<YuvTransaction>,
-        peer_addr: Option<SocketAddr>,
+        txs: Vec<(YuvTransaction, Option<SocketAddr>)>,
     ) -> Result<()> {
         let mut checked_txs = BTreeMap::new();
         let mut invalid_txs = Vec::new();
-        let mut not_found_parents = Vec::new();
+        let mut not_found_parents = HashMap::new();
 
-        tracing::debug!("Checking txs: {:?}", txs);
+        let txids: Vec<Txid> = txs.iter().map(|(tx, _)| tx.bitcoin_tx.txid()).collect();
+        tracing::debug!("Checking txs full: {:?}", txids);
 
-        for tx in txs {
+        for (tx, sender) in txs {
             let is_valid = self
                 .check_transaction(
                     tx.clone(),
+                    sender,
                     &mut invalid_txs,
                     &mut checked_txs,
                     &mut not_found_parents,
@@ -165,37 +144,25 @@ where
         // Send checked transactions to next worker:
         if !checked_txs.is_empty() {
             self.event_bus
-                .send(GraphBuilderMessage::CheckedTxs(
+                .send(ControllerMessage::FullyCheckedTxs(
                     checked_txs.values().cloned().collect::<Vec<_>>(),
                 ))
                 .await;
         }
 
         // Notify about invalid transactions:
-        if !invalid_txs.is_empty() {
-            let invalid_txs_ids = invalid_txs.iter().map(|tx| tx.bitcoin_tx.txid()).collect();
-            self.event_bus
-                .send(ControllerMessage::InvalidTxs {
-                    tx_ids: invalid_txs_ids,
-                    sender: peer_addr,
-                })
-                .await;
-
-            self.state_storage.put_invalid_txs(invalid_txs).await?;
-        }
+        self.handle_invalid_txs(invalid_txs).await?;
 
         // If there is no info about parent transactions, request them:
-        if !not_found_parents.is_empty() {
-            let Some(addr) = peer_addr else { return Ok(()) };
-
-            let inventory = not_found_parents
+        for (receiver, missing_parents) in not_found_parents {
+            let inventory = missing_parents
                 .iter()
                 .map(|txid| Inventory::Ytx(*txid))
                 .collect();
 
             let get_data_msg = ControllerMessage::GetData {
                 inv: inventory,
-                receiver: addr,
+                receiver,
             };
 
             self.event_bus.send(get_data_msg).await;
@@ -204,38 +171,75 @@ where
         Ok(())
     }
 
+    /// Partially check the transactions, i.e. perform the isolated check. It informs the controller about the invalid
+    /// transactions. It also sends valid [`YuvTxType::Issue`] and [`YuvTxType::Transfer`]
+    /// transactions to the tx confirmator.
+    pub async fn check_txs_isolated(&mut self, txs: Vec<YuvTransaction>) -> Result<()> {
+        let mut checked_txs = Vec::new();
+        let mut invalid_txs = Vec::new();
+
+        let txids: Vec<Txid> = txs.iter().map(|tx| tx.bitcoin_tx.txid()).collect();
+        tracing::debug!("Checking txs isolated: {:?}", txids);
+
+        for tx in txs {
+            let is_valid = check_transaction(&tx).is_ok();
+
+            if !is_valid {
+                invalid_txs.push(tx.clone());
+                continue;
+            }
+
+            checked_txs.push(tx.bitcoin_tx.txid());
+        }
+
+        // Send checked transactions for confirmation:
+        if !checked_txs.is_empty() {
+            self.event_bus
+                .send(ControllerMessage::PartiallyCheckedTxs(checked_txs))
+                .await;
+        }
+
+        // Notify about invalid transactions:
+        self.handle_invalid_txs(invalid_txs).await?;
+
+        Ok(())
+    }
+
+    async fn handle_invalid_txs(&self, invalid_txs: Vec<YuvTransaction>) -> Result<()> {
+        if invalid_txs.is_empty() {
+            return Ok(());
+        }
+
+        let invalid_txs_ids = invalid_txs.iter().map(|tx| tx.bitcoin_tx.txid()).collect();
+        self.event_bus
+            .send(ControllerMessage::InvalidTxs(invalid_txs_ids))
+            .await;
+
+        self.state_storage.put_invalid_txs(invalid_txs).await?;
+
+        Ok(())
+    }
+
     /// Do the corresponding checks for the transaction based on its type.
     async fn check_transaction(
         &mut self,
         tx: YuvTransaction,
+        sender: Option<SocketAddr>,
         invalid_txs: &mut Vec<YuvTransaction>,
         checked_txs: &mut BTreeMap<Txid, YuvTransaction>,
-        not_found_parents: &mut Vec<Txid>,
+        not_found_parents: &mut HashMap<SocketAddr, Vec<Txid>>,
     ) -> Result<bool> {
         let is_valid = match &tx.tx_type {
-            YuvTxType::Issue {
-                announcement,
-                output_proofs,
-            } => {
-                self.check_issuance(&tx, output_proofs, announcement)
-                    .await?
-            }
+            YuvTxType::Issue { announcement, .. } => self.check_issuance(&tx, announcement).await?,
             YuvTxType::Announcement(announcement) => {
                 self.check_announcements(&tx, announcement, invalid_txs)
                     .await?
             }
             YuvTxType::Transfer {
-                ref input_proofs,
-                output_proofs,
+                ref input_proofs, ..
             } => {
-                self.check_transfer(
-                    &tx,
-                    input_proofs,
-                    output_proofs,
-                    checked_txs,
-                    not_found_parents,
-                )
-                .await?
+                self.check_transfer(&tx, sender, input_proofs, checked_txs, not_found_parents)
+                    .await?
             }
         };
 
@@ -245,14 +249,9 @@ where
     async fn check_issuance(
         &self,
         tx: &YuvTransaction,
-        output_proofs: &Option<ProofMap>,
         announcement: &IssueAnnouncement,
     ) -> Result<bool> {
         if !self.check_issue_announcement(tx, announcement).await? {
-            return Ok(false);
-        }
-
-        if check_issue_isolated(&tx.bitcoin_tx, output_proofs, announcement).is_err() {
             return Ok(false);
         }
 
@@ -264,15 +263,11 @@ where
     async fn check_transfer(
         &mut self,
         tx: &YuvTransaction,
+        sender: Option<SocketAddr>,
         input_proofs: &ProofMap,
-        output_proofs: &ProofMap,
         checked_txs: &BTreeMap<Txid, YuvTransaction>,
-        not_found_parents: &mut Vec<Txid>,
+        not_found_parents: &mut HashMap<SocketAddr, Vec<Txid>>,
     ) -> Result<bool> {
-        if check_transfer_isolated(&tx.bitcoin_tx, input_proofs, output_proofs).is_err() {
-            return Ok(false);
-        }
-
         for (parent_id, proof) in input_proofs {
             let Some(txin) = tx.bitcoin_tx.input.get(*parent_id as usize) else {
                 return Err(CheckError::InputNotFound.into());
@@ -282,7 +277,6 @@ where
 
             if self.is_output_frozen(&parent, proof).await? {
                 tracing::info!(
-                    index = self.index,
                     "Transfer tx {} is invalid: output {} is frozen",
                     tx.bitcoin_tx.txid(),
                     parent,
@@ -293,7 +287,10 @@ where
 
             let is_in_storage = self.txs_storage.get_yuv_tx(&parent.txid).await?.is_some();
             if !is_in_storage && !checked_txs.contains_key(&parent.txid) {
-                not_found_parents.push(parent.txid);
+                if let Some(sender) = sender {
+                    let txids = not_found_parents.entry(sender).or_default();
+                    txids.push(parent.txid);
+                }
             }
         }
 
@@ -314,46 +311,24 @@ where
 
         let freeze_entry = self.state_storage.get_frozen_tx(outpoint).await?;
 
-        // Issuer haven't attempted to freeze this output, so it's not frozen:
+        // Owner hasn't attempted to freeze this output, so it's not frozen:
         let Some(freeze_entry) = freeze_entry else {
             return Ok(false);
         };
 
-        let mut checked_freezes = Vec::new();
+        let freeze_txid = freeze_entry.txid;
+        if freeze_entry.chroma != *chroma {
+            tracing::debug!(
+                tx = freeze_txid.to_string(),
+                "Freeze tx is invalid: freeze chroma doesn't match the output chroma, removing it",
+            );
 
-        // TODO: optimize this approach.
-        for freeze_txid in &freeze_entry.tx_ids {
-            let freeze_tx = self
-                .txs_storage
-                .get_yuv_tx(freeze_txid)
-                .await?
-                .ok_or_else(|| eyre!("Freeze tx not found, {}", freeze_txid))?;
+            self.txs_storage.delete_yuv_tx(&freeze_txid).await?;
 
-            let owner_input = self
-                .find_owner_in_txinputs(&freeze_tx.bitcoin_tx.input, chroma)
-                .await?;
-            if owner_input.is_none() {
-                tracing::info!(
-                    index = self.index,
-                    tx = freeze_txid.to_string(),
-                    "Freeze tx is invalid: none of the inputs has owner, removing it",
-                );
-
-                self.txs_storage.delete_yuv_tx(freeze_txid).await?;
-
-                continue;
-            }
-
-            checked_freezes.push(*freeze_txid);
+            return Ok(false);
         }
 
-        let is_frozen = checked_freezes.len() % 2 == 1;
-
-        self.state_storage
-            .put_frozen_tx(outpoint, checked_freezes)
-            .await?;
-
-        Ok(is_frozen)
+        Ok(true)
     }
 
     /// Check that all the [`Announcement`]s in transcation are valid.
@@ -417,7 +392,6 @@ where
             .await?;
         if owner_input.is_none() {
             tracing::debug!(
-                index = self.index,
                 tx = announcement_tx.bitcoin_tx.txid().to_string(),
                 "Chroma announcement tx is invalid: none of the inputs has owner, removing it",
             );
@@ -430,9 +404,8 @@ where
             .get_chroma_info(&announcement.chroma)
             .await?
         {
-            if chroma_info.total_supply > announcement.max_supply {
+            if announcement.max_supply != 0 && chroma_info.total_supply > announcement.max_supply {
                 tracing::debug!(
-                    index = self.index,
                     "Chroma announcement tx {} is invalid: current total supply {} exceeds max supply {}",
                     announcement_tx.bitcoin_tx.txid(),
                     chroma_info.total_supply,
@@ -448,7 +421,7 @@ where
         Ok(true)
     }
 
-    /// Check that [FrezeAnnouncement] is valid.
+    /// Check that [FreezeAnnouncement] is valid.
     ///
     /// The freeze announcement is considered valid if:
     /// 1. The transaction that is being frozen exists in the storage. If the output that is being
@@ -464,45 +437,12 @@ where
         announcement: &FreezeAnnouncement,
     ) -> Result<bool> {
         let freeze_txid = announcement.freeze_txid();
-        let freeze_vout = announcement.freeze_vout();
+        let chroma = announcement.chroma;
 
-        let Some(freeze_tx) = self.txs_storage.get_yuv_tx(&freeze_txid).await? else {
-            // TODO: If there is no transactions, worker should wait its appearance for check.
-            return Ok(true);
-        };
-
-        let Some(output_proofs) = get_output_proofs(&freeze_tx) else {
-            // If the announcement output is being frozen then it's an invalid freeze announcement.
-            // But we can just skip it because it doesn't break the protocol's rules.
-            tracing::debug!(
-                index = self.index,
-                "Freeze tx {} tries to freeze an announcement {}. Ignore it.",
-                announcement_tx.bitcoin_tx.txid(),
-                freeze_txid,
-            );
-
-            return Ok(true);
-        };
-
-        let Some(output) = output_proofs.get(&freeze_vout) else {
-            // If the output that is being frozen doesn't exist then it's an invalid freeze
-            // announcement. But we can just skip it because it doesn't break the protocol's rules.
-            tracing::debug!(
-                index = self.index,
-                "Freeze tx {} tries to freeze an unexisting output {}. Ignore it.",
-                announcement_tx.bitcoin_tx.txid(),
-                announcement.freeze_outpoint(),
-            );
-
-            return Ok(true);
-        };
-
-        let chroma = &output.pixel().chroma;
-        if let Some(chroma_info) = self.state_storage.get_chroma_info(chroma).await? {
+        if let Some(chroma_info) = self.state_storage.get_chroma_info(&chroma).await? {
             if let Some(chroma_announcement) = chroma_info.announcement {
                 if !chroma_announcement.is_freezable {
                     tracing::info!(
-                        index = self.index,
                         "Freeze tx {} is invalid: chroma {} doesn't allow freezes, removing it",
                         freeze_txid,
                         chroma,
@@ -515,11 +455,10 @@ where
 
         // Check signer of the freeze tx is issuer of the chroma which frozen tx has.
         let owner_input = self
-            .find_owner_in_txinputs(&announcement_tx.bitcoin_tx.input, chroma)
+            .find_owner_in_txinputs(&announcement_tx.bitcoin_tx.input, &chroma)
             .await?;
         if owner_input.is_none() {
             tracing::info!(
-                index = self.index,
                 tx = freeze_txid.to_string(),
                 "Freeze tx is invalid: none of the inputs has owner, removing it",
             );
@@ -563,7 +502,6 @@ where
             .await?;
         if owner_input.is_none() {
             tracing::debug!(
-                index = self.index,
                 tx = announcement_yuv_tx.bitcoin_tx.txid().to_string(),
                 "Issue announcement tx is invalid: none of the inputs has owner, removing it",
             );
@@ -593,7 +531,6 @@ where
 
             if max_supply != 0 && max_supply < new_total_supply {
                 tracing::info!(
-                    index = self.index,
                     "Issue announcement tx {} is invalid: current supply {} + announcement amount {} is higher than the max supply {}",
                     announcement_tx.txid(),
                     total_supply,
@@ -641,7 +578,6 @@ where
             .await?;
         if owner_input.is_none() {
             tracing::debug!(
-                index = self.index,
                 tx = announcement_yuv_tx.bitcoin_tx.txid().to_string(),
                 "Transfer ownership announcement tx is invalid: none of the inputs has owner, removing it",
             );
@@ -664,43 +600,6 @@ where
     ) -> eyre::Result<Option<&'a TxIn>> {
         let chroma_info = self.state_storage.get_chroma_info(chroma).await?;
 
-        // Retry finding owner in the inputs if the connection with the Bitcoin RPC is lost.
-        // If all the attempts are unsuccessful, gracefully shutdown the node.
-        // TODO: this approach should be refactored in the future.
-        for i in 0..MAX_RETRY_ATTEMPTS {
-            println!("Attempt {}", i);
-            let owner_input = find_owner_in_txinputs(
-                Arc::clone(&self.bitcoin_client),
-                inputs,
-                chroma,
-                chroma_info.clone(),
-            )
-            .await;
-
-            match owner_input {
-                Ok(owner_input_opt) => return Ok(owner_input_opt),
-                Err(err) => {
-                    if i == MAX_RETRY_ATTEMPTS - 1 {
-                        return Err(err);
-                    }
-                }
-            }
-
-            sleep(ATTEMPT_INTERVAL).await;
-        }
-
-        Ok(None)
-    }
-}
-
-fn get_output_proofs(yuv_tx: &YuvTransaction) -> Option<&ProofMap> {
-    match yuv_tx.tx_type {
-        YuvTxType::Issue {
-            ref output_proofs, ..
-        } => output_proofs.as_ref(),
-        YuvTxType::Transfer {
-            ref output_proofs, ..
-        } => Some(output_proofs),
-        YuvTxType::Announcement(_) => None,
+        find_owner_in_txinputs(inputs, chroma, chroma_info)
     }
 }

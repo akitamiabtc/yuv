@@ -245,7 +245,7 @@ dependencies = [
  "core-rpc",
  "electrsd",
  "electrum-client 0.18.0",
- "env_logger 0.7.1",
+ "env_logger",
  "esplora-client",
  "futures",
  "getrandom",
@@ -364,12 +364,12 @@ dependencies = [
 
 [[package]]
 name = "bitcoin-client"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
  "bitcoin-private",
- "jsonrpc 0.3.0",
+ "jsonrpc 0.3.4",
  "log",
  "mockall",
  "serde",
@@ -480,7 +480,7 @@ checksum = "b4ae4235e6dac0694637c763029ecea1a2ec9e4e06ec2729bd21ba4d9c863eb7"
 
 [[package]]
 name = "bulletproof"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "eyre",
@@ -623,6 +623,17 @@ checksum = "90bc066a67923782aa8515dbaea16946c5bcc5addbd668bb80af688e53e548a0"
 dependencies = [
  "clap_builder",
  "clap_derive",
+]
+
+[[package]]
+name = "clap-verbosity"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7bf75a8e0407a558bd7e8e7919baa352e21fb0c1c7702a63c853f2277c4c63"
+dependencies = [
+ "clap",
+ "log",
+ "serde",
 ]
 
 [[package]]
@@ -981,14 +992,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
-name = "dyn-clone"
-version = "1.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
-
-[[package]]
 name = "e2e-test"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bdk",
  "bitcoin",
@@ -1008,7 +1013,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "uuid",
  "ydk",
  "yuv-pixels",
  "yuv-rpc-api",
@@ -1139,16 +1143,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_logger"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1211,22 +1205,20 @@ dependencies = [
 
 [[package]]
 name = "event-bus"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "event-bus-macros",
  "flume",
  "tokio-test",
- "tracing",
 ]
 
 [[package]]
 name = "event-bus-macros"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "event-bus",
  "quote",
  "syn 2.0.66",
- "uuid",
 ]
 
 [[package]]
@@ -1914,7 +1906,7 @@ dependencies = [
 
 [[package]]
 name = "jsonrpc"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -2211,26 +2203,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "microserde"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc73d64402c57ce913a4a4788ca4e0c60329a2e29782f8e88d510c1c951fac46"
-dependencies = [
- "microserde-derive",
-]
-
-[[package]]
-name = "microserde-derive"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3afa8ee462bb9ed735b544476a9e4ece0f10be76864ff9b80a6a525b837232"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2378,10 +2350,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "nonempty"
-version = "0.7.0"
+name = "nu-ansi-term"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e591e719385e6ebaeb5ce5d3887f7d5676fceca6411d1925ccc95745f3d6f7"
+checksum = "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
+dependencies = [
+ "overload",
+ "winapi",
+]
 
 [[package]]
 name = "num-conv"
@@ -2409,15 +2385,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num_threads"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "number_prefix"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2434,7 +2401,7 @@ dependencies = [
 
 [[package]]
 name = "ogaki"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bytes",
  "clap",
@@ -2515,6 +2482,12 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
+
+[[package]]
+name = "overload"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "owo-colors"
@@ -2824,17 +2797,6 @@ name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
-
-[[package]]
-name = "quickcheck"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
-dependencies = [
- "env_logger 0.8.4",
- "log",
- "rand",
-]
 
 [[package]]
 name = "quote"
@@ -3368,19 +3330,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
-]
-
-[[package]]
 name = "sha-1"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3436,17 +3385,6 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
  "rand_core",
-]
-
-[[package]]
-name = "simplelog"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16257adbfaef1ee58b1363bdc0664c9b8e1e30aed86049635fb5f147d065a9c0"
-dependencies = [
- "log",
- "termcolor",
- "time",
 ]
 
 [[package]]
@@ -3652,15 +3590,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termcolor"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
-dependencies = [
- "winapi-util",
-]
-
-[[package]]
 name = "termtree"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3668,7 +3597,7 @@ checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
 
 [[package]]
 name = "tests"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bdk",
  "bitcoin",
@@ -3720,9 +3649,7 @@ checksum = "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
 dependencies = [
  "deranged",
  "itoa",
- "libc",
  "num-conv",
- "num_threads",
  "powerfmt",
  "serde",
  "time-core",
@@ -4010,6 +3937,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-serde"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4026,6 +3964,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
 dependencies = [
  "matchers",
+ "nu-ansi-term",
  "once_cell",
  "regex",
  "serde",
@@ -4034,6 +3973,7 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-core",
+ "tracing-log",
  "tracing-serde",
 ]
 
@@ -4159,12 +4099,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1766d682d402817b5ac4490b3c3002d91dfa0d22812f341609f97b08757359c"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4206,16 +4140,6 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
-
-[[package]]
-name = "uuid"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
-dependencies = [
- "getrandom",
- "serde",
-]
 
 [[package]]
 name = "valuable"
@@ -4587,11 +4511,10 @@ dependencies = [
 
 [[package]]
 name = "ydk"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bdk",
  "bitcoin",
- "bitcoin-client",
  "bulletproof",
  "ciborium",
  "eyre",
@@ -4611,26 +4534,27 @@ dependencies = [
 
 [[package]]
 name = "yuv-cli"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bdk",
  "bitcoin",
  "bitcoin-client",
  "bulletproof",
  "clap",
+ "clap-verbosity",
  "color-eyre",
  "config",
  "indicatif",
  "jsonrpsee",
- "log",
  "serde",
  "serde_json",
- "serde_yaml",
  "sha2",
- "simplelog",
  "thiserror",
  "tokio",
  "toml 0.8.13",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
  "ydk",
  "yuv-pixels",
  "yuv-rpc-api",
@@ -4641,15 +4565,15 @@ dependencies = [
 
 [[package]]
 name = "yuv-controller"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "event-bus",
  "eyre",
+ "once_cell",
  "tokio",
  "tokio-util",
  "tracing",
- "uuid",
  "yuv-p2p",
  "yuv-storage",
  "yuv-types",
@@ -4657,7 +4581,7 @@ dependencies = [
 
 [[package]]
 name = "yuv-indexers"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
@@ -4679,38 +4603,32 @@ dependencies = [
 
 [[package]]
 name = "yuv-p2p"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
  "bitcoin_hashes 0.11.0",
- "crossbeam-channel",
  "event-bus",
  "eyre",
  "fastrand",
  "flume",
  "libc",
  "log",
- "microserde",
  "mockall",
- "nonempty",
  "popol",
- "quickcheck",
  "serde",
- "serde_json",
  "socket2 0.4.10",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
  "trust-dns-resolver",
  "yuv-types",
 ]
 
 [[package]]
 name = "yuv-pixels"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "bulletproof",
@@ -4719,24 +4637,24 @@ dependencies = [
  "hex",
  "once_cell",
  "serde",
- "thiserror",
 ]
 
 [[package]]
 name = "yuv-rpc-api"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
  "jsonrpsee",
  "serde",
  "yuv-pixels",
+ "yuv-storage",
  "yuv-types",
 ]
 
 [[package]]
 name = "yuv-rpc-server"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
@@ -4745,6 +4663,7 @@ dependencies = [
  "eyre",
  "jsonrpsee",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -4758,7 +4677,7 @@ dependencies = [
 
 [[package]]
 name = "yuv-storage"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "bitcoin",
@@ -4776,10 +4695,9 @@ dependencies = [
 
 [[package]]
 name = "yuv-tx-attach"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
- "bitcoin-client",
  "event-bus",
  "eyre",
  "once_cell",
@@ -4788,21 +4706,21 @@ dependencies = [
  "tokio-test",
  "tokio-util",
  "tracing",
+ "yuv-controller",
+ "yuv-p2p",
  "yuv-pixels",
  "yuv-storage",
- "yuv-tx-check",
  "yuv-types",
 ]
 
 [[package]]
 name = "yuv-tx-check"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "bitcoin-client",
  "event-bus",
  "eyre",
- "futures",
  "k256",
  "lazy_static",
  "log",
@@ -4812,7 +4730,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "uuid",
  "yuv-pixels",
  "yuv-storage",
  "yuv-types",
@@ -4820,7 +4737,7 @@ dependencies = [
 
 [[package]]
 name = "yuv-tx-confirm"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "bitcoin-client",
@@ -4834,25 +4751,24 @@ dependencies = [
 
 [[package]]
 name = "yuv-types"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
- "ciborium",
+ "bitcoin-client",
  "core2 0.4.0",
- "dyn-clone",
  "event-bus",
  "eyre",
+ "hex",
  "once_cell",
  "serde",
  "serde_json",
  "typetag",
- "uuid",
  "yuv-pixels",
 ]
 
 [[package]]
 name = "yuvd"
-version = "0.3.0"
+version = "0.3.4"
 dependencies = [
  "bitcoin",
  "bitcoin-client",
@@ -4868,7 +4784,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "yuv-controller",
  "yuv-indexers",
  "yuv-p2p",

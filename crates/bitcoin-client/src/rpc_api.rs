@@ -1409,7 +1409,6 @@ pub trait RpcApi: Sized {
                 )
                 .await
             }
-            _ => Err(Error::UnsupportedVersion),
         }
     }
 

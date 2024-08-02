@@ -7,7 +7,8 @@ CLI tool for managing YUV transactions.
 - Create a YUV transaction (`transfer`, `issue`, `freeze`):
     - Issue an asset from your pair of keys;
     - Transfer issued tokens;
-    - Freeze, unfreeze YUV outputs;
+    - Freeze YUV outputs;
+    - Burn YUV tokens;
 - Communicate with a YUV node (`node` subcommand):
     - Provide pixel proofs to the YUV node;
     - Get YUV transactions from the YUV node;
@@ -93,7 +94,6 @@ Let's go through some of the scenarios:
     - Perform a multichromatic transfer.
 6. Using **USD Issuer**'s keys create a freeze transaction for **Bob**'s output
    (see [step 6]);
-7. Using **USD Issuer**'s keys create an unfreeze transaction for **Bob**'s output (see [step 7]);
 
 > We will use [Nigiri] for this demo to setup configured Regtest Bitcoin node and fund our freshly
 > created users with Bitcoins.
@@ -305,32 +305,13 @@ from environment variable added in [step 2]).
 RESULT:
 
 ```text
-tx id: 4f98d522ad33152af8392fc13f191ae966c5503e2ced2aad116c41890641b807
-type: Issue
-data:
-  output_proofs:
-    0:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 10000
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-    1:
-      type: EmptyPixel
-      data:
-        inner_key: 03ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
+tx id: b51cbc492b1ee31897defc0349aac93b4b13f1fbfb77a07d47e01fcd54f6e607
+tx hex: 01000000000101838fec46940f7337004ad6bbe7cee6177b91ef29b327bdfbe12de8ff454a5f5e0000000000feffffff030000000000000000376a357975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000e8030000000000001600145510fe1d689b2f68c6a861c50dae500506d0220320dcf50500000000160014889b6e052cad94c93296132dfa637e77ef03f1e1024730440220741c112dd1285194497116fd693265db1d451e6547ed4ad302dcb744db8180ab02201675b5e957bfa1201cf239023bb783b7b112167a4a6a4b4c04e7b84b1e7e5746012103ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab266000000007975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000010200000001000000000000000000000000000000000000271000000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919020000000502ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
 ```
 
-As the result, you will get the transaction ID and structure of the issuance
-proof of the YUV transaction. By parameters obtained from configuration file,
+As the result, you will get the transaction ID and hex. By parameters obtained from configuration file,
 `yuv-cli` will send it for broadcasting to YUV node with created proofs, where
 the node will wait until the tranasction is mined to check it before accepting.
-
-> There is an empty pixel. It doesn't hold any Pixel data, it is
-> just empty proof indicating that this Bitcoin output holds only satoshis
-> and zero YUV tokens.
 
 Using `nigiri` let's mine the next block:
 
@@ -341,10 +322,10 @@ nigiri rpc --generate 1
 Check that the transaction has been accepted by the node:
 
 ```sh
-yuv-cli --config ./usd.toml get --txid 4f98d522ad33152af8392fc13f191ae966c5503e2ced2aad116c41890641b807
+yuv-cli --config ./usd.toml get --txid b51cbc492b1ee31897defc0349aac93b4b13f1fbfb77a07d47e01fcd54f6e607
 ```
 
-As a sign of acceptance, you would receive a YUV transaction in JSON format.
+As a sign of acceptance, you would receive a YUV transaction in HEX format.
 
 Also, we can check current **Alice**'s balances:
 
@@ -356,6 +337,133 @@ RESULT:
 
 ```text
 bcrt1p4v5dxtlzrrfuk57nxr3d6gwmtved47ulc55kcsk30h93e43ma2eqvrek30: 10000
+```
+
+To see the structure of the YUV transaction in JSON format, use the `decode` CLI command:
+
+```sh
+yuv-cli decode --tx 01000000000101838fec46940f7337004ad6bbe7cee6177b91ef29b327bdfbe12de8ff454a5f5e0000000000feffffff030000000000000000376a357975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000e8030000000000001600145510fe1d689b2f68c6a861c50dae500506d0220320dcf50500000000160014889b6e052cad94c93296132dfa637e77ef03f1e1024730440220741c112dd1285194497116fd693265db1d451e6547ed4ad302dcb744db8180ab02201675b5e957bfa1201cf239023bb783b7b112167a4a6a4b4c04e7b84b1e7e5746012103ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab266000000007975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000010200000001000000000000000000000000000000000000271000000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919020000000502ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
+```
+
+As the result, you will get the YUV transaction in human-readable format:
+
+```json
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 102,
+    "input": [
+      {
+        "previous_output": "5e5f4a45ffe82de1fbbd27b329ef917b17e6cee7bbd64a0037730f9446ec8f83:0",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "30440220741c112dd1285194497116fd693265db1d451e6547ed4ad302dcb744db8180ab02201675b5e957bfa1201cf239023bb783b7b112167a4a6a4b4c04e7b84b1e7e574601",
+          "03ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 0,
+        "script_pubkey": "6a357975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "00145510fe1d689b2f68c6a861c50dae500506d02203"
+      },
+      {
+        "value": 99998752,
+        "script_pubkey": "0014889b6e052cad94c93296132dfa637e77ef03f1e1"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Issue",
+    "data": {
+      "output_proofs": {
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 10000
+              },
+              "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+            },
+            "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+          }
+        },
+        "2": {
+          "type": "EmptyPixel",
+          "data": {
+            "inner_key": "02ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          }
+        }
+      },
+      "announcement": {
+        "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2",
+        "amount": 10000
+      }
+    }
+  }
+}
+```
+
+> There is an empty pixel. It doesn't hold any Pixel data, it is
+> just empty proof indicating that this Bitcoin output holds only satoshis
+> and zero YUV tokens.
+
+The `decode` method is also able to decode hex encoded YUV proofs, which can be obtained with the following command:
+
+```sh
+yuv-cli --config ./usd.toml get --txid 4f98d522ad33152af8392fc13f191ae966c5503e2ced2aad116c41890641b807 --proofs
+```
+
+Result is as follows:
+
+```text
+007975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000010200000001000000000000000000000000000000000000271000000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919020000000502ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
+```
+
+You can now decode it:
+
+```sh
+yuv-cli decode --proofs 007975760002ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab210270000000000000000000000000000010200000001000000000000000000000000000000000000271000000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919020000000502ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
+```
+
+The command will show you only the transaction type and YUV proofs, which is useful when you don't need to see the Bitcoin transaction data:
+
+```json
+{
+  "type": "Issue",
+  "data": {
+    "output_proofs": {
+      "1": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 10000
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      },
+      "2": {
+        "type": "EmptyPixel",
+        "data": {
+          "inner_key": "02ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+        }
+      }
+    },
+    "announcement": {
+      "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2",
+      "amount": 10000
+    }
+  }
+}
 ```
 
 Let's do the same with **EUR Issuer**:
@@ -398,42 +506,107 @@ yuv-cli --config ./alice.toml transfer \
 RESULT:
 
 ```text
-tx id: a5bfd730c26e6b08ee9a0a02f1140e5527d1d47d45fc78fecbc661c5bc9383d5
-type: Transfer
-data:
-  input_proofs:
-    0:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 10000
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-  output_proofs:
-    0:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 1000
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6
-    1:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 9000
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-    2:
-      type: EmptyPixel
-      data:
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
+tx id: 493b87a94d12ba62bc4dbeb178056c769324b28c65a81c787e0a341a6a6e4ba0
+tx hex: 010000000001021e3693ef6baab69a2363d61b5b7b2cec1423f2679537755b7763194383ec0fd40100000000feffffff07e6f654cd1fe0477da077fbfbf1134b3bc9aa4903fcde9718e31e2b49bc1cb50100000000feffffff03e80300000000000016001408fc812cf2568f414c1db93440380d0ccea5b6f5e8030000000000001600147bcd39708e5ea6e2dd72df1110c151bc30d66d84f7dbf5050000000016001430ccee4e57dfd7eca508ef46c015606d0469d53c02473044022001bdec0ea7e8ee543c3ba27acdba9cb6d493a2ee5e23bd64766a9ab5bd7c7b6b02206ce6dc427b9c0ab2d2696e6084883afc250400d5e2246b9588a08f16dad1f071012102bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e91902473044022065b934a8762e6f5d844070721e5b6ceb0d269d4c897749f46db5fdc84d5d4bba022015a9565b62a5fe66fcd3960462013c376f4d92cf6841cb0dd3e0f6595efbd18401210317c706e8ce08e46591040bc6e914e0a7b757401077fb2ca0422209859566a6ff6e000000010100000001000000000000000000000000000000000000271000000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919030000000000000000000000000000000000000000000003e800000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af601000000000000000000000000000000000000232800000000000000000000000000000000ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab202bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919020000000502bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
 ```
 
-Generate block using `nigiri`:
+After decoding the transaction, you can see its structure:
+
+```json
+{
+  "bitcoin_tx": {
+    "version": 1,
+    "lock_time": 110,
+    "input": [
+      {
+        "previous_output": "d40fec83431963775b75379567f22314ec2c7b5b1bd663239ab6aa6bef93361e:1",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "3044022001bdec0ea7e8ee543c3ba27acdba9cb6d493a2ee5e23bd64766a9ab5bd7c7b6b02206ce6dc427b9c0ab2d2696e6084883afc250400d5e2246b9588a08f16dad1f07101",
+          "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        ]
+      },
+      {
+        "previous_output": "b51cbc492b1ee31897defc0349aac93b4b13f1fbfb77a07d47e01fcd54f6e607:1",
+        "script_sig": "",
+        "sequence": 4294967294,
+        "witness": [
+          "3044022065b934a8762e6f5d844070721e5b6ceb0d269d4c897749f46db5fdc84d5d4bba022015a9565b62a5fe66fcd3960462013c376f4d92cf6841cb0dd3e0f6595efbd18401",
+          "0317c706e8ce08e46591040bc6e914e0a7b757401077fb2ca0422209859566a6ff"
+        ]
+      }
+    ],
+    "output": [
+      {
+        "value": 1000,
+        "script_pubkey": "001408fc812cf2568f414c1db93440380d0ccea5b6f5"
+      },
+      {
+        "value": 1000,
+        "script_pubkey": "00147bcd39708e5ea6e2dd72df1110c151bc30d66d84"
+      },
+      {
+        "value": 99998711,
+        "script_pubkey": "001430ccee4e57dfd7eca508ef46c015606d0469d53c"
+      }
+    ]
+  },
+  "tx_type": {
+    "type": "Transfer",
+    "data": {
+      "input_proofs": {
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 10000
+              },
+              "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+            },
+            "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+          }
+        }
+      },
+      "output_proofs": {
+        "0": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 1000
+              },
+              "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+            },
+            "inner_key": "027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6"
+          }
+        },
+        "1": {
+          "type": "Sig",
+          "data": {
+            "pixel": {
+              "luma": {
+                "amount": 9000
+              },
+              "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+            },
+            "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+          }
+        },
+        "2": {
+          "type": "EmptyPixel",
+          "data": {
+            "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Generate a block using `nigiri`:
 
 ```sh
 nigiri rpc --generate 1
@@ -514,66 +687,96 @@ yuv-cli --config ./alice.toml transfer \
     --recipient $BOB
 ```
 
-RESULT:
+Decoded proofs:
 
-```text
-tx id: 036d18a4c8ceb75c08a3abcabb40f8a239bbebd19751c365c610569581cda7db
-type: Transfer
-data:
-  input_proofs:
-    0:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 9000
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-    1:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 10000
-          chroma: b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-  output_proofs:
-    0:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 500
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6
-    1:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 1000
-          chroma: b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5
-        inner_key: 027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6
-    2:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 8500
-          chroma: ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-    3:
-      type: Sig
-      data:
-        pixel:
-          luma:
-            amount: 9000
-          chroma: b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
-    4:
-      type: EmptyPixel
-      data:
-        inner_key: 02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919
+```json
+{
+  "type": "Transfer",
+  "data": {
+    "input_proofs": {
+      "1": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 9000
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      },
+      "2": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 10000
+            },
+            "chroma": "b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5"
+          },
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      }
+    },
+    "output_proofs": {
+      "0": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 500
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6"
+        }
+      },
+      "1": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 1000
+            },
+            "chroma": "b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5"
+          },
+          "inner_key": "027c728c6a6c5746d206ca005c3e29f06782981873ac5ccf2e1e3d060a40fd3af6"
+        }
+      },
+      "2": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 8500
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      },
+      "3": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 9000
+            },
+            "chroma": "b92726575fc55904349c38053ed47633f7a6aa153e25b31f6bc02d92506a8ad5"
+          },
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      },
+      "4": {
+        "type": "EmptyPixel",
+        "data": {
+          "inner_key": "02bdd2c029e4836fabace9bac3ec9cc9ced9d547e3f3e3b59073e33c9b3508e919"
+        }
+      }
+    }
+  }
+}
 ```
 
 Generate a block using `nigiri`:
@@ -659,44 +862,80 @@ Now **Bob** has one less UTXO:
 6936880d51e5fd92b6dd3c754905b538f146f69942080c4f3dca8b99d5f1f086:0 500
 ```
 
-#### 7. Create unfreeze transaction for **Bob**'s output
+#### 7. Burn YUV tokens
 
-Using **Issuer**'s keys create an unfreeze transaction for **Bob**'s output:
-
-```sh
-yuv-cli --config ./usd.toml unfreeze 477df4cb007a46fe9efd7de75ffa7012846d9babea3f31bbb50c9b93f12ff7f5 0
-```
-
-RESULT:
+Let's suppose USD has the following balances:
 
 ```text
-Transaction broadcasted: 5faeae04cd7b4d853866eb427896a3a6fff89f2e2f320def1950cd30e0c43b8f
+YUV balances:
+bcrt1p4v5dxtlzrrfuk57nxr3d6gwmtved47ulc55kcsk30h93e43ma2eqvrek30: 8000
 ```
 
-Generate block:
+Using the `burn` command create a burn transaction of 5000 tokens:
 
 ```sh
-nigiri rpc --generate 1
+yuv-cli --config ./usd.toml burn --amount 5000 --chroma $USD
 ```
 
-Also, you may check if that transaction was indexed by node:
+Decoded proofs:
 
-```sh
-yuv-cli --config ./usd.toml get --txid 5faeae04cd7b4d853866eb427896a3a6fff89f2e2f320def1950cd30e0c43b8f
+```json
+{
+  "type": "Transfer",
+  "data": {
+    "input_proofs": {
+      "1": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 8000
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "02ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+        }
+      }
+    },
+    "output_proofs": {
+      "0": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 5000
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "020202020202020202020202020202020202020202020202020202020202020202"
+        }
+      },
+      "1": {
+        "type": "Sig",
+        "data": {
+          "pixel": {
+            "luma": {
+              "amount": 3000
+            },
+            "chroma": "ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+          },
+          "inner_key": "03ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+        }
+      },
+      "2": {
+        "type": "EmptyPixel",
+        "data": {
+          "inner_key": "02ab28d32fe218d3cb53d330e2dd21db5b32dafb9fc5296c42d17dcb1cd63beab2"
+        }
+      }
+    }
+  }
+}
 ```
 
-And finally, check **Bob**'s YUV UTXOS:
+After the transaction is attached, the burnt tokens are impossible to spend.
 
-```sh
-yuv-cli --config ./bob.toml utxos $USD
-```
-
-RESULT:
-
-```text
-477df4cb007a46fe9efd7de75ffa7012846d9babea3f31bbb50c9b93f12ff7f5:0 1000
-6936880d51e5fd92b6dd3c754905b538f146f69942080c4f3dca8b99d5f1f086:0 500
-```
+It's easy to see that the recipient's public key is `020202020202020202020202020202020202020202020202020202020202020202`, which is actually an empty `Chroma` that is used for empty pixels as well. YUV node tracks proofs with this inner key and doesn't allow spending these tokens, even though the probability to obtain the private key corresponding to this public key is miserably low.
 
 #### 8. Bulletproofs
 
@@ -758,8 +997,6 @@ yuv-cli --config ./bob.toml bulletproof check --amount 1000 --tx $TRANSFER_TX_ID
 [step 5]: #5-transfer-from-alice-to-bob
 
 [step 6]: #6-freeze-bobs-output
-
-[step 7]: #7-create-unfreeze-transaction-for-bobs-output
 
 [usage]: #usage
 

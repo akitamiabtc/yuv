@@ -7,15 +7,13 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-bulletproof = ["yuv-tx-check/bulletproof", "yuv-pixels/bulletproof"]
+bulletproof = ["yuv-pixels/bulletproof"]
 
 [dependencies]
 event-bus = { path = "../event-bus" }
 yuv-types = { path = "../types", features = ["messages"] }
 yuv-pixels = { path = "../pixels" }
 yuv-storage = { path = "../storage" }
-yuv-tx-check = { path = "../tx-check" }
-bitcoin-client = { path = "../bitcoin-client" }
 
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -26,6 +24,8 @@ eyre = { workspace = true }
 
 [dev-dependencies]
 yuv-pixels = { path = "../pixels" }
+yuv-p2p = { path = "../p2p", features = ["mocks"] }
+yuv-controller = { path = "../controller" }
 tokio = { workspace = true, features = ["test-util", "macros"] }
-once_cell = { version = "1.18.0" }
+once_cell = { workspace = true }
 tokio-test = "0.4.3"

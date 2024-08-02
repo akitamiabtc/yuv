@@ -54,7 +54,7 @@ async fn spawn_graph_builder(
     txs_storage: LevelDB,
     cancellation: CancellationToken,
 ) {
-    let graph_builder = GraphBuilder::new(txs_storage, event_bus, 100);
+    let graph_builder = GraphBuilder::new(txs_storage, event_bus);
 
     tokio::spawn(graph_builder.run(cancellation));
 }

@@ -4,6 +4,7 @@ use bdk::blockchain::GetTx;
 use bitcoin::Txid;
 use clap::Args;
 use color_eyre::eyre;
+use jsonrpsee::tracing::debug;
 use ydk::txbuilder::form_issue_announcement;
 use yuv_tx_check::{check_transaction, CheckError};
 use yuv_types::{ProofMap, TransferProofs, YuvTransaction, YuvTxType};
@@ -31,8 +32,8 @@ pub(crate) async fn run(
         output: output_proofs_map,
     } = proofs.into_proof_maps()?;
 
-    log::debug!("Input proofs: {:?}", input_proofs_map);
-    log::debug!("Output proofs: {:?}", output_proofs_map);
+    debug!("Input proofs: {:?}", input_proofs_map);
+    debug!("Output proofs: {:?}", output_proofs_map);
 
     check_p2wpkh_tx_by_id(blockchain, &txid, input_proofs_map, output_proofs_map).await?;
 

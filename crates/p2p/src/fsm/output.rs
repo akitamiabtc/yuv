@@ -6,11 +6,10 @@
 //! with specific capabilities, eg. peer disconnection, message sending etc. to
 //! communicate with the network.
 use std::sync::{Arc, Mutex};
-use std::{cell::RefCell, collections::VecDeque, net, rc::Rc};
+use std::{collections::VecDeque, net};
 use tracing::debug;
-use yuv_types::messages::p2p::{Inventory, NetworkMessage, RawNetworkMessage};
+use yuv_types::messages::p2p::{NetworkMessage, RawNetworkMessage};
 use yuv_types::network::Network;
-use yuv_types::YuvTransaction;
 
 use crate::{
     fsm::event::Event,
@@ -83,17 +82,6 @@ pub trait Wire<E> {
 
     /// Send an `addr` message.
     fn addr(&mut self, addr: PeerId, addrs: Vec<(u32, Address)>);
-
-    // Inventory ///////////////////////////////////////////////////////////////
-
-    /// Sends an `inv` message to a peer.
-    fn inv(&mut self, addr: PeerId, inventories: Vec<Inventory>) -> Result<(), eyre::Error>;
-
-    /// Sends a `getdata` message to a peer.
-    fn get_data(&mut self, addr: PeerId, inventories: Vec<Inventory>) -> Result<(), eyre::Error>;
-
-    /// Sends a `yuvtx` message to a peer.
-    fn yuvtx(&mut self, addr: PeerId, tx: Vec<YuvTransaction>) -> Result<(), eyre::Error>;
 }
 
 /// Holds protocol outputs and pending I/O.
@@ -152,19 +140,6 @@ impl Outbox {
     /// Push an event to the channel.
     pub fn event(&self, event: Event) {
         self.push(Io::Event(event));
-    }
-}
-
-/// Draining iterator over outbound channel queue.
-pub struct Drain {
-    items: Rc<RefCell<VecDeque<Io>>>,
-}
-
-impl Iterator for Drain {
-    type Item = Io;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.items.borrow_mut().pop_front()
     }
 }
 
@@ -236,21 +211,5 @@ impl<E: Into<Event> + std::fmt::Display> Wire<E> for Outbox {
 
     fn addr(&mut self, addr: PeerId, addrs: Vec<(u32, Address)>) {
         self.message(addr, NetworkMessage::Addr(addrs));
-    }
-
-    fn inv(&mut self, addr: PeerId, inventories: Vec<Inventory>) -> Result<(), eyre::Error> {
-        // let inventories_bytes = serde_json::to_vec(&inventories).wrap_err("failed to parse inv")?;
-        self.message(addr, NetworkMessage::Inv(inventories));
-        Ok(())
-    }
-
-    fn get_data(&mut self, addr: PeerId, inventories: Vec<Inventory>) -> Result<(), eyre::Error> {
-        self.message(addr, NetworkMessage::GetData(inventories));
-        Ok(())
-    }
-
-    fn yuvtx(&mut self, addr: PeerId, yuvtxs: Vec<YuvTransaction>) -> Result<(), eyre::Error> {
-        self.message(addr, NetworkMessage::YuvTx(yuvtxs));
-        Ok(())
     }
 }

@@ -18,25 +18,7 @@ for full validation of transaction's history, the tx should be also checked by
 
 ## `TxChecker`
 
-`TxChecker` - an abstract service, which is represented by [`TxCheckerWorkerPool`] and [`TxCheckerWorker`]s in this crate:
-
-```mermaid
-flowchart LR
-    Controller-- Txs for isolated check -->q1((Queue In))
-    subgraph TxCheckerWorkerPool
-    q1-->tx1[[TxCheckerWorker1]]
-    q1-->tx2[[TxCheckerWorker2]]
-    q1-->tx3[[TxCheckerWorker3]]
-    tx1-->q2((Queue Out))
-    tx2-->q2
-    tx3-->q2
-    end
-    q2-- Txs for history check -->GraphBuilder
-```
-
-[`TxCheckerWorkerPool`] handles the start and finish of the [`TxCheckerWorker`]s.
-
-[`TxCheckerWorker`] waits for the transaction checking events from `EventBus`.
+[`TxChecker`] is a worker that waits for the transaction checking events from `EventBus`.
 
 Firstly, it checks that such a transaction exists by requesting it by id from
 the Bitcoin node. Secondly, it uses [`check_transaction`] function for each tx.
@@ -46,24 +28,22 @@ transaction and checking that the signer of the `freeze` is able to freeze the
 target transaction (by comparing chroma of the target and signer's public key).
 
 Then the valid transactions are sent to `GraphBuilder`. In case some of the
-parents are missing in `TransactionStorage`, [`TxCheckerWorker`] sends message
+parents are missing in `TransactionStorage`, [`TxChecker`] sends message
 to `Controller` about missing parents. If some of the transactions are invalid,
 it sends message about them to `Controller`.
-
 
 ```mermaid
 sequenceDiagram
     participant Controller
-    participant TxCheckerWorker
+    participant TxChecker
     participant BitcoinNode
     participant TransactionsStorage
     participant GraphBuilder
 
-    Controller->>TxCheckerWorker: Txs for check
-    TxCheckerWorker->>BitcoinNode: Get txs by id
-    TxCheckerWorker->>TxCheckerWorker: Check txs for isolated rules violation
-    TxCheckerWorker->>GraphBuilder: Send valid txs
-    TxCheckerWorker->>TransactionsStorage: Check parents of each tx
-    TxCheckerWorker->>Controller: Request full tx info for each missed one
-    TxCheckerWorker->>Controller: Send invalid txs
+    Controller->>TxChecker: Txs for check
+    TxChecker->>TxChecker: Check txs for isolated rules violation
+    TxChecker->>GraphBuilder: Send valid txs
+    TxChecker->>TransactionsStorage: Check parents of each tx
+    TxChecker->>Controller: Request full tx info for each missed one
+    TxChecker->>Controller: Send invalid txs
 ```

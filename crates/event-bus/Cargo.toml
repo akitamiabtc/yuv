@@ -1,5 +1,5 @@
 [package]
-name        = "event-bus"
+name = "event-bus"
 description = "A simple event bus for multiple channels"
 version.workspace = true
 edition.workspace = true
@@ -7,8 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-flume   = { workspace = true }
-tracing = { workspace = true }
+flume = { workspace = true }
 
 event-bus-macros = { path = "../event-bus-macros" }
 

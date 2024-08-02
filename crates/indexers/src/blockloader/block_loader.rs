@@ -26,8 +26,6 @@ pub struct BlockLoader {
     task_tracker: TaskTracker,
     /// Loading progress, contains loading process of the chunk
     loading_progress: LoadingProgress,
-    /// Number of confirmations that is required to consider block as confirmed.
-    confirmation_number: u8,
 }
 
 impl BlockLoader {
@@ -35,7 +33,6 @@ impl BlockLoader {
         bitcoin_client: Arc<BitcoinRpcClient>,
         workers_number: usize,
         chunk_size: usize,
-        confirmation_number: u8,
     ) -> Self {
         Self {
             bitcoin_client,
@@ -44,7 +41,6 @@ impl BlockLoader {
             loaded_blocks: Vec::with_capacity(chunk_size),
             task_tracker: TaskTracker::new(),
             loading_progress: LoadingProgress::default(),
-            confirmation_number,
         }
     }
 }
@@ -189,7 +185,7 @@ impl BlockLoader {
         loaded_block_listener: &mut mpsc::Receiver<FetchLoadedBlockEvent>,
         start_height: usize,
     ) -> eyre::Result<()> {
-        let confirmed_height = self.get_confirmed_height().await?;
+        let confirmed_height = self.bitcoin_client.get_block_count().await?;
 
         let blocks_to_load = (start_height..=(confirmed_height as usize)).collect::<Vec<usize>>();
 
@@ -263,14 +259,5 @@ impl BlockLoader {
         tracing::debug!("Block loader finished loading proccess");
 
         Ok(())
-    }
-
-    async fn get_confirmed_height(&self) -> eyre::Result<u64> {
-        let best_block_height = self.bitcoin_client.get_block_count().await?;
-
-        let confirmed_height =
-            best_block_height.saturating_sub(self.confirmation_number as u64 - 1);
-
-        Ok(confirmed_height)
     }
 }

@@ -1,5 +1,5 @@
 # Start with a rust alpine image
-FROM rust:1.74-bookworm as builder
+FROM rust:1.76-bookworm as builder
 
 WORKDIR /opt
 
@@ -18,7 +18,9 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     cargo build --release -p ogaki && \
     mkdir out && \
     cp target/release/yuvd out/ && \
-    cp target/release/ogaki out/
+    cp target/release/ogaki out/ && \
+    strip out/yuvd && \
+    strip out/ogaki
 
 # use a plain alpine image, the alpine version needs to match the builder
 FROM debian:bookworm-slim

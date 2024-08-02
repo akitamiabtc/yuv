@@ -3,7 +3,7 @@ use bulletproof::util::ecdh;
 use clap::Args;
 use color_eyre::eyre::{self, bail, OptionExt};
 use yuv_pixels::{generate_bulletproof, Chroma};
-use yuv_rpc_api::transactions::{GetRawYuvTransactionResponse, YuvTransactionsRpcClient};
+use yuv_rpc_api::transactions::{YuvTransactionStatus, YuvTransactionsRpcClient};
 
 use crate::context::Context;
 
@@ -40,11 +40,17 @@ pub async fn run(
         .expect("should convert to array");
     let (_, commit) = generate_bulletproof(amount, raw_dh_key);
 
-    let yuv_tx = yuv_client.get_raw_yuv_transaction(outpoint.txid).await?;
-
-    let GetRawYuvTransactionResponse::Attached(attached_tx) = yuv_tx else {
+    let yuv_tx = yuv_client.get_yuv_transaction(outpoint.txid).await?;
+    if yuv_tx.status != YuvTransactionStatus::Attached {
         bail!(
             "Transaction {txid} is not attached by YUV node",
+            txid = outpoint.txid
+        )
+    }
+
+    let Some(attached_tx) = yuv_tx.data else {
+        bail!(
+            "Transaction {txid} is not present in the node's storage",
             txid = outpoint.txid
         )
     };

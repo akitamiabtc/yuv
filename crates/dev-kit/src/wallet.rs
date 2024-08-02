@@ -18,10 +18,11 @@ use bitcoin::{
     secp256k1::{self, All, Secp256k1},
     Address, Network, OutPoint, PrivateKey, PublicKey,
 };
-use eyre::{eyre, Context};
-use futures::future::join_all;
+use eyre::{bail, eyre, Context};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use yuv_pixels::{Chroma, LightningCommitmentProof, Pixel, PixelProof, ToEvenPublicKey};
+use yuv_pixels::{
+    Chroma, LightningCommitmentProof, Pixel, PixelProof, ToEvenPublicKey, ZERO_PUBLIC_KEY,
+};
 use yuv_rpc_api::transactions::YuvTransactionsRpcClient;
 use yuv_storage::{
     FlushStrategy, LevelDB, LevelDbOptions, PagesNumberStorage,
@@ -362,55 +363,45 @@ where
         &self,
         utxos: Vec<(OutPoint, PixelProof)>,
     ) -> eyre::Result<Vec<(OutPoint, PixelProof)>> {
-        let futures = utxos
-            .into_iter()
-            .map(|(OutPoint { txid, vout }, proof)| async move {
-                let output_status = match self
-                    .bitcoin_provider
-                    .get_tx_out_status(OutPoint::new(txid, vout))
-                {
-                    Ok(status) => status,
-                    Err(e) => {
-                        tracing::debug!("Failed to get tx output: {}", e);
-                        return None;
-                    }
-                };
+        let mut filtered = Vec::new();
 
-                match output_status {
-                    TxOutputStatus::Spent => {
-                        tracing::debug!("UTXO {}:{} is spent", txid, vout);
-                        return None;
-                    }
-                    TxOutputStatus::NotFound => {
-                        tracing::debug!("UTXO {}:{} not found", txid, vout);
-                        return None;
-                    }
-                    _ => (),
+        for (OutPoint { txid, vout }, proof) in utxos {
+            let output_status = self
+                .bitcoin_provider
+                .get_tx_out_status(OutPoint::new(txid, vout))
+                .wrap_err("failed to get tx output")?;
+
+            match output_status {
+                TxOutputStatus::Spent => {
+                    tracing::debug!("UTXO {}:{} is spent", txid, vout);
+                    continue;
                 }
-
-                match &proof {
-                    PixelProof::Sig(..) => Some((OutPoint::new(txid, vout), proof)),
-                    PixelProof::Lightning(LightningCommitmentProof { to_self_delay, .. }) => {
-                        match self.bitcoin_provider.get_tx_confirmations(&txid) {
-                            Ok(confirmations) => {
-                                if confirmations >= *to_self_delay as u32 {
-                                    Some((OutPoint::new(txid, vout), proof))
-                                } else {
-                                    None
-                                }
-                            }
-                            Err(_) => None, // Handle the error by returning None
-                        }
-                    }
-                    #[cfg(feature = "bulletproof")]
-                    PixelProof::Bulletproof(..) => Some((OutPoint::new(txid, vout), proof)),
-                    PixelProof::EmptyPixel(..) => Some((OutPoint::new(txid, vout), proof)),
-                    PixelProof::LightningHtlc(..) | PixelProof::Multisig(..) => None,
+                TxOutputStatus::NotFound => {
+                    tracing::debug!("UTXO {}:{} not found", txid, vout);
+                    continue;
                 }
-            });
+                _ => (),
+            }
 
-        let results = join_all(futures).await;
-        let filtered: Vec<_> = results.into_iter().flatten().collect();
+            match &proof {
+                PixelProof::Sig(..) => filtered.push((OutPoint::new(txid, vout), proof)),
+                PixelProof::Lightning(LightningCommitmentProof { to_self_delay, .. }) => {
+                    let confirmations = self.bitcoin_provider.get_tx_confirmations(&txid)?;
+
+                    if confirmations >= *to_self_delay as u32 {
+                        filtered.push((OutPoint::new(txid, vout), proof));
+                    }
+                }
+                #[cfg(feature = "bulletproof")]
+                PixelProof::Bulletproof(..) => filtered.push((OutPoint::new(txid, vout), proof)),
+                PixelProof::EmptyPixel(..) => filtered.push((OutPoint::new(txid, vout), proof)),
+                // NOTE: We skip these types of outputs as they are not spendable without
+                // additional information.
+                //
+                // `LightningHtlc` and `Multisig` are usually spent by Lightning node and not by user.
+                PixelProof::LightningHtlc(..) | PixelProof::Multisig(..) => {}
+            }
+        }
 
         Ok(filtered)
     }
@@ -513,6 +504,16 @@ where
     ///
     /// [`YuvTxType::Transfer`]: yuv_types::YuvTxType::Transfer
     pub fn build_transfer(&self) -> eyre::Result<TransferTransactionBuilder<YTDB, BTDB>> {
+        // Even though the probability of obtaining the key corresponding to the zero chroma is
+        // miserably low, it is prohibited to send transfer transactions from the burn wallet.
+        let pubkey = self.signer_key.public_key(&self.secp_ctx);
+        if pubkey == *ZERO_PUBLIC_KEY {
+            bail!(
+                "Cannot transfer from the burn wallet, pubkey={}",
+                pubkey.to_string()
+            );
+        }
+
         TransferTransactionBuilder::try_from(self)
     }
 

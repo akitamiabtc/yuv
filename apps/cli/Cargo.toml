@@ -16,10 +16,10 @@ bdk = { path = "../../crates/bdk", features = [
     "use-esplora-blocking",
 ], default-features = false }
 bulletproof = { path = "../../crates/bulletproof" }
-yuv-types = { path = "../../crates/types" }
+yuv-types = { path = "../../crates/types", features = ["consensus"] }
 yuv-pixels = { path = "../../crates/pixels" }
 yuv-tx-check = { path = "../../crates/tx-check" }
-yuv-rpc-api = { path = "../../crates/rpc-api", features = ["client"] }
+yuv-rpc-api = { path = "../../crates/rpc-api", features = ["client"], default-features = false }
 yuv-storage = { path = "../../crates/storage" }
 bitcoin-client = { path = "../../crates/bitcoin-client" }
 
@@ -31,11 +31,12 @@ thiserror = { workspace = true }
 config = { workspace = true }
 
 serde_json = { version = "1.0" }
-serde_yaml = { version = "0.9.25" }
 indicatif = { version = "0.17.8" }
 toml = { version = "0.8.12" }
 color-eyre = { workspace = true }
-log = { version = "0.4.20" }
-simplelog = { version = "0.12.1" }
+tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "tracing-log"] }
+tracing = { workspace = true }
 sha2 = { version = "0.10.8" }
 clap = { version = "4.3.23", features = ["derive"] }
+clap-verbosity = { version = "2.1.0" }
+tracing-log = "0.2.0"

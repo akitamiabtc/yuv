@@ -3,6 +3,9 @@ use bitcoin::Transaction;
 use crate::announcements::{Announcement, IssueAnnouncement};
 use crate::ProofMap;
 
+#[cfg(feature = "consensus")]
+pub mod consensus;
+
 #[cfg(feature = "bulletproof")]
 use crate::is_bulletproof;
 
@@ -33,6 +36,23 @@ impl YuvTransaction {
             Some(proofs) => is_bulletproof(proofs.values()),
             None => false,
         }
+    }
+
+    /// Checks if the transaction is burning tokens.
+    ///
+    /// Returns `true` if it is a burn transaction, `false` otherwise.
+    pub fn is_burn(&self) -> bool {
+        let Some(output_proofs) = self.tx_type.output_proofs() else {
+            return false;
+        };
+
+        for proof in output_proofs.values() {
+            if proof.is_burn() {
+                return true;
+            }
+        }
+
+        false
     }
 }
 

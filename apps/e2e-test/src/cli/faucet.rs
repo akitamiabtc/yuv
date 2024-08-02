@@ -82,7 +82,7 @@ impl Faucet {
             builder.finish(&self.rpc_blockchain).await?
         };
 
-        self.funder.yuv_client().send_raw_yuv_tx(tx, None).await?;
+        self.funder.yuv_client().send_yuv_tx(tx.hex(), None).await?;
         self.rpc_blockchain
             .generate_to_address(6, &self.funder.p2wpkh_address()?)?;
 

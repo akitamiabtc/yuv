@@ -6,7 +6,7 @@ The main components include:
 
 - [Transaction builder](src/txbuilder.rs): used to build **issuance** and **transfer** YUV transactions.
 - [Transaction signer](src/txsigner.rs): used to sign *singlesig*, *multisig*, *bulletproof* and *lightning* YUV transactions.
-- [YUV Wallet](src/wallet.rs): an abstraction over `BDK` wallet that provides an interface for simple transaction creation. It synchronizes with the YUV node to fetch all the unspent outpoints and fetches UTXOs with satoshis through different providers (like Bitcoin node or Esplora server). It is also used to create **freeze/unfreeze** transactions.
+- [YUV Wallet](src/wallet.rs): an abstraction over `BDK` wallet that provides an interface for simple transaction creation. It synchronizes with the YUV node to fetch all the unspent outpoints and fetches UTXOs with satoshis through different providers (like Bitcoin node or Esplora server).
 - [Coin selection](src/yuv_coin_selection.rs): provides a trait for generalized YUV coin selection algorithms. Currently, there are two implementations:
   - `YuvLargestFirstCoinSelection`: this coin selection algorithm sorts the available UTXOs by value and then picks them starting from the largest ones until the required amount is reached. Simple and dumb coin selection.
   - `YUVOldestFirstCoinSelection`: this coin selection algorithm sorts the available UTXOs by `blockheight` and then picks them starting from the oldest ones until the required amount is reached.

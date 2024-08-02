@@ -1,7 +1,8 @@
-use alloc::string::ToString;
-use alloc::vec::Vec;
+use alloc::{string::ToString, vec::Vec};
+
 use core::fmt;
 use core::mem::size_of;
+use yuv_pixels::{Chroma, ChromaParseError, CHROMA_SIZE};
 
 use crate::{network::Network, Announcement, AnyAnnouncement};
 use bitcoin::hashes::Hash;
@@ -15,40 +16,45 @@ use crate::announcements::{AnnouncementKind, AnnouncementParseError};
 pub const FREEZE_ANNOUNCEMENT_KIND: AnnouncementKind = [0, 1];
 /// Size of txid in bytes.
 const TX_ID_SIZE: usize = size_of::<Txid>();
+/// Size of vout in bytes.
+const VOUT_SIZE: usize = size_of::<u32>();
 /// Size of freeze entry in bytes.
-pub const FREEZE_ENTRY_SIZE: usize = TX_ID_SIZE + size_of::<u32>();
+pub const FREEZE_ENTRY_SIZE: usize = TX_ID_SIZE + VOUT_SIZE + CHROMA_SIZE;
 
-/// Freeze announcement. It appears when issuer declares that tx is frozen or unfrozen.
+/// Freeze announcement. It appears when issuer declares that tx is frozen.
 ///
 /// # Structure
 ///
-/// - `txid` - 32 bytes [`Txid`] of the transaction that is frozen or unfrozen.
-/// - `vout` - 4 bytes u32 number of the transaction's output that is frozen or unfrozen.
+/// - `txid` - 32 bytes [`Txid`] of the frozen transaction.
+/// - `vout` - 4 bytes u32 number of the transaction's output that is frozen.
+/// - `chroma` - 32 bytes [`Chroma`].
 ///
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FreezeAnnouncement {
-    /// The outpoint of the transaction that is frozen or unfrozen.
+    /// The chroma to freeze.
+    pub chroma: Chroma,
+    /// The outpoint of the transaction that is frozen.
     pub outpoint: OutPoint,
 }
 
 impl FreezeAnnouncement {
     /// Create a new freeze announcement.
-    pub fn new(outpoint: OutPoint) -> Self {
-        Self { outpoint }
+    pub fn new(chroma: Chroma, outpoint: OutPoint) -> Self {
+        Self { chroma, outpoint }
     }
 
-    /// Return the transaction id of the frozen or unfrozen transaction.
+    /// Return the transaction id of the frozen transaction.
     pub fn freeze_txid(&self) -> Txid {
         self.outpoint.txid
     }
 
-    /// Return the vout of the frozen or unfrozen transaction.
+    /// Return the vout of the frozen transaction.
     pub fn freeze_vout(&self) -> u32 {
         self.outpoint.vout
     }
 
-    /// Return the outpoint of the frozen or unfrozen transaction.
+    /// Return the outpoint of the frozen transaction.
     pub fn freeze_outpoint(&self) -> OutPoint {
         self.outpoint
     }
@@ -72,11 +78,18 @@ impl AnyAnnouncement for FreezeAnnouncement {
 
         let txid = Txid::from_slice(&data[..TX_ID_SIZE])
             .map_err(FreezeAnnouncementParseError::InvalidTxHash)?;
-        let vout = u32::from_be_bytes(data[TX_ID_SIZE..].try_into().expect("Size is checked"));
+        let vout = u32::from_be_bytes(
+            data[TX_ID_SIZE..TX_ID_SIZE + VOUT_SIZE]
+                .try_into()
+                .expect("Size is checked"),
+        );
 
         let outpoint = OutPoint::new(txid, vout);
 
-        Ok(Self { outpoint })
+        let chroma = Chroma::from_bytes(&data[TX_ID_SIZE + VOUT_SIZE..])
+            .map_err(FreezeAnnouncementParseError::from)?;
+
+        Ok(Self { chroma, outpoint })
     }
 
     fn to_announcement_data_bytes(&self) -> Vec<u8> {
@@ -84,6 +97,7 @@ impl AnyAnnouncement for FreezeAnnouncement {
 
         bytes.extend_from_slice(&self.outpoint.txid[..]);
         bytes.extend_from_slice(&self.outpoint.vout.to_be_bytes());
+        bytes.extend_from_slice(&self.chroma.to_bytes());
 
         bytes
     }
@@ -95,18 +109,6 @@ impl From<FreezeAnnouncement> for Announcement {
     }
 }
 
-impl From<OutPoint> for FreezeAnnouncement {
-    fn from(outpoint: OutPoint) -> Self {
-        Self { outpoint }
-    }
-}
-
-impl From<FreezeAnnouncement> for OutPoint {
-    fn from(freeze_announcement: FreezeAnnouncement) -> Self {
-        freeze_announcement.outpoint
-    }
-}
-
 /// Errors that can occur when parsing [freeze announcement].
 ///
 /// [freeze announcement]: FreezeAnnouncement
@@ -114,6 +116,7 @@ impl From<FreezeAnnouncement> for OutPoint {
 pub enum FreezeAnnouncementParseError {
     InvalidSize(usize),
     InvalidTxHash(bitcoin::hashes::Error),
+    InvalidChroma(ChromaParseError),
 }
 
 impl fmt::Display for FreezeAnnouncementParseError {
@@ -125,6 +128,9 @@ impl fmt::Display for FreezeAnnouncementParseError {
                 FREEZE_ENTRY_SIZE, size
             ),
             FreezeAnnouncementParseError::InvalidTxHash(e) => write!(f, "invalid tx hash: {}", e),
+            FreezeAnnouncementParseError::InvalidChroma(e) => {
+                write!(f, "invalid chroma: {}", e)
+            }
         }
     }
 }
@@ -142,6 +148,12 @@ impl std::error::Error for FreezeAnnouncementParseError {
 impl From<bitcoin::hashes::Error> for FreezeAnnouncementParseError {
     fn from(err: bitcoin::hashes::Error) -> Self {
         Self::InvalidTxHash(err)
+    }
+}
+
+impl From<ChromaParseError> for FreezeAnnouncementParseError {
+    fn from(err: ChromaParseError) -> Self {
+        Self::InvalidChroma(err)
     }
 }
 
@@ -164,17 +176,22 @@ mod test {
     use alloc::{format, vec};
     use bitcoin::{OutPoint, ScriptBuf, Txid};
     use core::str::FromStr;
+    use yuv_pixels::Chroma;
 
     pub const TEST_TXID: &str = "abc0000000000000000000000000000000000000000000000000000000000abc";
+    pub const TEST_CHROMA: &str =
+        "bcrt1p4v5dxtlzrrfuk57nxr3d6gwmtved47ulc55kcsk30h93e43ma2eqvrek30";
 
     #[test]
-    fn test_serialize_desirialize() {
+    fn test_serialize_deserialize() {
         let outpoint = OutPoint {
             txid: Txid::from_str(TEST_TXID).unwrap(),
             vout: 34,
         };
 
-        let announcement = FreezeAnnouncement { outpoint };
+        let chroma = Chroma::from_address(TEST_CHROMA).expect("valid chroma");
+
+        let announcement = FreezeAnnouncement { chroma, outpoint };
 
         let data_bytes = announcement.to_announcement_data_bytes();
         let parsed_announcement =
@@ -226,16 +243,20 @@ mod test {
     #[test]
     fn test_backward_compatibility() {
         let valid_announcement_bytes = vec![
-            121, 117, 118, 0, 1, 188, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 171, 0, 0, 0, 34,
+            121, 117, 118, 0, 1, 30, 105, 39, 50, 167, 221, 11, 231, 199, 76, 22, 97, 187, 166,
+            121, 234, 176, 1, 231, 117, 202, 135, 70, 12, 206, 237, 42, 74, 39, 232, 113, 36, 0, 0,
+            0, 1, 134, 176, 11, 134, 121, 220, 117, 255, 91, 28, 201, 237, 47, 160, 124, 88, 120,
+            11, 14, 139, 75, 122, 51, 78, 71, 14, 46, 163, 249, 253, 0, 95,
         ];
 
         let valid_announcement_data = vec![
-            188, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 192, 171, 0, 0, 0, 34,
+            30, 105, 39, 50, 167, 221, 11, 231, 199, 76, 22, 97, 187, 166, 121, 234, 176, 1, 231,
+            117, 202, 135, 70, 12, 206, 237, 42, 74, 39, 232, 113, 36, 0, 0, 0, 1, 134, 176, 11,
+            134, 121, 220, 117, 255, 91, 28, 201, 237, 47, 160, 124, 88, 120, 11, 14, 139, 75, 122,
+            51, 78, 71, 14, 46, 163, 249, 253, 0, 95,
         ];
 
-        let valid_announcement_script = ScriptBuf::from_hex("6a297975760001bc0a00000000000000000000000000000000000000000000000000000000c0ab00000022").unwrap();
+        let valid_announcement_script = ScriptBuf::from_hex("6a4979757600011e692732a7dd0be7c74c1661bba679eab001e775ca87460cceed2a4a27e871240000000186b00b8679dc75ff5b1cc9ed2fa07c58780b0e8b4b7a334e470e2ea3f9fd005f").unwrap();
 
         assert!(announcement_from_script(&valid_announcement_script).is_ok());
         assert!(announcement_from_bytes(&valid_announcement_bytes).is_ok());

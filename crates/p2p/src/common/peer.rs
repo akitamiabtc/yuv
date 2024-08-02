@@ -34,9 +34,6 @@ pub trait Store {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
-    /// Clears the store of all addresses.
-    fn clear(&mut self);
 }
 
 /// Implementation of [`Store`] for [`std::collections::HashMap`].
@@ -71,10 +68,6 @@ impl Store for std::collections::HashMap<SocketAddr, KnownAddress> {
 
     fn len(&self) -> usize {
         self.len()
-    }
-
-    fn clear(&mut self) {
-        self.clear()
     }
 }
 
@@ -143,7 +136,5 @@ pub trait AddressSource {
     /// Record an address of ours as seen by a remote peer.
     fn record_local_address(&mut self, addr: net::SocketAddr);
     fn is_connected(&mut self, addr: net::SocketAddr) -> bool;
-    /// Return an iterator over random peer addresses.
-    fn iter(&mut self, services: ServiceFlags) -> Box<dyn Iterator<Item = (Address, Source)> + '_>;
     fn insert(&mut self, addrs: impl IntoIterator<Item = (u32, Address)>, source: Source);
 }

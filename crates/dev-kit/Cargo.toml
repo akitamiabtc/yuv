@@ -14,9 +14,8 @@ tokio = { workspace = true, features = ["sync"] }
 yuv-types = { path = "../types", features = ["messages"] }
 yuv-pixels = { path = "../pixels" }
 bulletproof = { path = "../bulletproof" }
-yuv-rpc-api = { path = "../rpc-api", features = ["client"] }
+yuv-rpc-api = { path = "../rpc-api", features = ["client"], default-features = false }
 yuv-storage = { path = "../storage" }
-bitcoin-client = { path = "../bitcoin-client" }
 
 rand = { version = "0.8.5" }
 hashbrown = { version = "0.14.5" }
@@ -29,5 +28,5 @@ futures = { workspace = true }
 ciborium = { workspace = true }
 
 [dev-dependencies]
-once_cell = { version = "1.18.0" }
 tokio = { workspace = true, features = ["macros", "test-util"] }
+once_cell = { workspace = true }
