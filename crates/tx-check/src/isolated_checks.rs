@@ -18,7 +18,7 @@ use {
 };
 
 use yuv_pixels::{
-    CheckableProof, Chroma, P2WPKHWitnessData, Pixel, PixelKey, PixelProof, ToEvenPublicKey,
+    CheckableProof, Chroma, P2WPKHWitness, Pixel, PixelKey, PixelProof, ToEvenPublicKey,
 };
 use yuv_types::{announcements::ChromaInfo, AnyAnnouncement, ProofMap};
 use yuv_types::{announcements::IssueAnnouncement, YuvTransaction, YuvTxType};
@@ -326,17 +326,16 @@ pub(crate) fn find_owner_in_txinputs<'a>(
 }
 
 fn handle_p2wpkh_input(ctx: &Secp256k1<All>, witness: &Witness, chroma: &Chroma) -> bool {
-    let Ok(witness) = P2WPKHWitnessData::from_witness(witness) else {
+    let Ok(witness) = P2WPKHWitness::from_witness(witness) else {
         return false;
     };
 
-    let (xonly_public_key, _parity) = witness.pubkey.inner.x_only_public_key();
+    let (xonly_public_key, _parity) = witness.pubkey.x_only_public_key();
     // It's also necessary to check if the witness pubkey matches the pixel key made with an empty pixel,
     // as the transaction can also spend tweaked UTXOs.
     let (pixel_pubkey, _parity) = PixelKey::new(Pixel::empty(), &chroma.public_key().inner)
         .expect("Key should tweak")
         .even_public_key(ctx)
-        .inner
         .x_only_public_key();
 
     &xonly_public_key == chroma.xonly() || xonly_public_key == pixel_pubkey

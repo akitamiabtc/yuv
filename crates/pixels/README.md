@@ -52,7 +52,7 @@ let pixel = Pixel::new(luma, chroma);
 let pixel_key = PixelKey::new(pixel, &bob_pubkey).unwrap();
 
 // Generate address for sending YUV coins (Regtest is used as an example).
-let address = Address::p2wpkh(&pixel_key, Network::Regtest).unwrap();
+let address = Address::p2wpkh(&pixel_key.into(), Network::Regtest).unwrap();
 
 println!("{address}");
 ```

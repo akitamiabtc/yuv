@@ -11,6 +11,7 @@ use bdk::{
     },
     database::{MemoryDatabase, SqliteDatabase},
     descriptor,
+    miniscript::ToPublicKey,
     wallet::wallet_name_from_descriptor,
     Balance, LocalUtxo, SignOptions,
 };
@@ -23,6 +24,7 @@ use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use yuv_pixels::{
     Chroma, LightningCommitmentProof, Pixel, PixelProof, ToEvenPublicKey, ZERO_PUBLIC_KEY,
 };
+
 use yuv_rpc_api::transactions::YuvTransactionsRpcClient;
 use yuv_storage::{
     FlushStrategy, LevelDB, LevelDbOptions, PagesNumberStorage,
@@ -304,12 +306,15 @@ where
             return Ok(());
         }
 
-        let pubkey = self.signer_key.even_public_key(&self.secp_ctx);
+        let pubkey = self
+            .signer_key
+            .public_key(&self.secp_ctx)
+            .even_public_key(&self.secp_ctx);
 
         let utxos = YuvTransactionsIndexer::new(
             self.yuv_client.clone(),
             self.yuv_txs_storage.clone(),
-            pubkey,
+            pubkey.to_public_key(),
         )
         .sync()
         .await
@@ -385,10 +390,10 @@ where
 
             match &proof {
                 PixelProof::Sig(..) => filtered.push((OutPoint::new(txid, vout), proof)),
-                PixelProof::Lightning(LightningCommitmentProof { to_self_delay, .. }) => {
+                PixelProof::Lightning(LightningCommitmentProof { data, .. }) => {
                     let confirmations = self.bitcoin_provider.get_tx_confirmations(&txid)?;
 
-                    if confirmations >= *to_self_delay as u32 {
+                    if confirmations >= data.to_self_delay as u32 {
                         filtered.push((OutPoint::new(txid, vout), proof));
                     }
                 }
@@ -399,7 +404,9 @@ where
                 // additional information.
                 //
                 // `LightningHtlc` and `Multisig` are usually spent by Lightning node and not by user.
-                PixelProof::LightningHtlc(..) | PixelProof::Multisig(..) => {}
+                PixelProof::LightningHtlc(..)
+                | PixelProof::Multisig(..)
+                | PixelProof::P2WSH(..) => {}
             }
         }
 

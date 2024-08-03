@@ -9,7 +9,7 @@ To build new version of `yuvd` docker container you need to run `docker build`
 with these options from root of the repo:
 
 ```sh
-docker build -f ./infrastructure/build/yuvd-autoupdates.dockerfile -t akitamiabtc/yuvd .
+docker build -f ./infrastructure/build/yuvd.dockerfile -t akitamiabtc/yuvd .
 ```
 
 ## Setup dev environment
