@@ -71,7 +71,7 @@ where
     fn tweak(self, pixel: P) -> PublicKey {
         let key: PixelKey = PixelKey::new(pixel, &self).expect(EXPECT_MSG);
 
-        *key
+        key.0.inner
     }
 }
 
@@ -82,7 +82,7 @@ where
     fn tweak(self, pixel: P) -> SecretKey {
         let seckey = PixelPrivateKey::new(pixel, &self).expect(EXPECT_MSG);
 
-        *seckey
+        seckey.0
     }
 }
 

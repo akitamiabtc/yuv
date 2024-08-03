@@ -21,7 +21,7 @@ CLI tool for managing YUV transactions.
 Clone git repository:
 
 ```sh
-git clone git@github.com:akitamiabtc/yuv.git
+git clone https://github.com/akitamiabtc/yuv.git
 ```
 
 Install using cargo:

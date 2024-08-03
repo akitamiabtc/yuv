@@ -8,10 +8,9 @@ use crate::{CheckableProof, Pixel, Tweakable};
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "consensus")]
-pub mod consensus;
-mod script;
 mod utils;
+
+mod script;
 pub use self::script::{HtlcScriptKind, LightningHtlcData, LightningHtlcScript};
 
 mod errors;
@@ -60,7 +59,7 @@ impl CheckableProof for LightningHtlcProof {
     type Error = LightningHtlcProofError;
 
     fn checked_check_by_input(&self, txin: &bitcoin::TxIn) -> Result<(), Self::Error> {
-        // Last element in witness data for HTLC input should always be the witness
+        // Last element in witness data for HTLC input should always be the wintess
         // program (the script).
         let Some(witness_program) = txin.witness.last() else {
             return Err(LightningHtlcProofError::InvalidWitnessProgramStructure);

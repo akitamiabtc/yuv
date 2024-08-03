@@ -1,5 +1,4 @@
 use bitcoin::secp256k1::{rand::thread_rng, All, Message, PublicKey, Secp256k1, SecretKey};
-
 use bitcoin::{
     blockdata::locktime::absolute::LockTime, ecdsa::Signature as EcdsaSig, OutPoint, ScriptBuf,
     Transaction, TxIn, TxOut, Txid,
@@ -199,7 +198,7 @@ fn new_transfer_tx(pubkey: PublicKey, seckey: SecretKey, txid: Txid) -> YuvTrans
     );
 
     let pixel_key = PixelKey::new(tx_inp_proof.pixel(), &pubkey).unwrap();
-    add_witness(&mut tx, seckey, *pixel_key, txid, 0);
+    add_witness(&mut tx, seckey, pixel_key.0.inner, txid, 0);
 
     tx
 }

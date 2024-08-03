@@ -148,7 +148,6 @@ impl LightningHtlcData {
         let mut data = PushBytesBuf::new();
         // We don't expect this error to ever occur based on provided data
         let _ = data.extend_from_slice(&self.revocation_key_hash.to_byte_array());
-
         let mut builder = Builder::new()
             .push_opcode(OP_DUP)
             .push_opcode(OP_HASH160)

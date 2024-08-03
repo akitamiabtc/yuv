@@ -146,7 +146,7 @@ where
                     }
                 }
                 PixelProof::Lightning(proof) => {
-                    let x_only = proof.data.local_delayed_pubkey.x_only_public_key().0;
+                    let x_only = proof.local_delayed_pubkey.x_only_public_key().0;
 
                     if x_only == self.pubkey.inner.x_only_public_key().0 {
                         tracing::debug!("Adding lightning output proof: {:?}", output_proof);
@@ -176,13 +176,6 @@ where
                     }
                 }
                 PixelProof::EmptyPixel(proof) => {
-                    let (proof_x_only_pubkey, _parity) = proof.inner_key.x_only_public_key();
-
-                    if proof_x_only_pubkey == self_x_only_pubkey {
-                        self.user_outpoints.insert(outpoint, output_proof.clone());
-                    }
-                }
-                PixelProof::P2WSH(proof) => {
                     let (proof_x_only_pubkey, _parity) = proof.inner_key.x_only_public_key();
 
                     if proof_x_only_pubkey == self_x_only_pubkey {

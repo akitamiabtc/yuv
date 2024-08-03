@@ -4,9 +4,8 @@ use bitcoin::ScriptBuf;
 use bitcoin::{
     self,
     secp256k1::{self, Scalar, Secp256k1, Signing, Verification},
-    PublicKey,
+    PrivateKey, PublicKey,
 };
-
 use core::ops::Deref;
 
 use crate::errors::PixelKeyError;
@@ -16,12 +15,12 @@ use crate::PixelHash;
 ///
 /// Defined as: `PXK = hash(PXH, Pk) * G + P_{B}`,
 /// where `Pk` is owner's public key (coin inner key).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PixelKey(secp256k1::PublicKey);
+pub struct PixelKey(pub PublicKey);
 
 impl Deref for PixelKey {
-    type Target = secp256k1::PublicKey;
+    type Target = PublicKey;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -54,22 +53,21 @@ impl PixelKey {
         };
 
         // hash(PXH, P_{B})
-        let pxh_b = pixel_hash_pubkey_scalar(&pxh.into(), &inner_key)?;
+        let pxh_b = pixelhash_pubkey_hash(&pxh.into(), &inner_key);
+
+        // Convert `hash(PXH, P_{B})` into scalar for next operation.
+        let pxh_b = Scalar::from_be_bytes(*pxh_b.as_byte_array())?;
 
         // P_{B} + hash(PXH, P_{B}) * G (where G - generator point).
         //
         // `add_exp_tweak` multiplies by G the hash (scalar).
         let pxk = inner_key.add_exp_tweak(ctx, &pxh_b)?;
 
-        Ok(Self(pxk))
-    }
-
-    pub fn new_unchecked(inner_key: secp256k1::PublicKey) -> Self {
-        Self(inner_key)
+        Ok(Self(PublicKey::new(pxk)))
     }
 
     pub fn to_p2wpkh(&self) -> Option<ScriptBuf> {
-        let pubkey_hash = PublicKey::new(self.0).wpubkey_hash()?;
+        let pubkey_hash = self.0.wpubkey_hash()?;
 
         Some(ScriptBuf::new_v0_p2wpkh(&pubkey_hash))
     }
@@ -90,16 +88,6 @@ fn pixelhash_pubkey_hash(pxh: &PixelHash, pubkey: &secp256k1::PublicKey) -> Sha2
     Sha256Hash::from_engine(hash_engine)
 }
 
-/// The same as [`pixelhash_pubkey_hash`], but returns the scalar.
-fn pixel_hash_pubkey_scalar(
-    pxh: &PixelHash,
-    pubkey: &secp256k1::PublicKey,
-) -> Result<Scalar, PixelKeyError> {
-    let hash = pixelhash_pubkey_hash(pxh, pubkey);
-
-    Scalar::from_be_bytes(*hash.as_byte_array()).map_err(|_| PixelKeyError::PixelHashOutOfRange)
-}
-
 /// Private key that can spend a YUV UTXO.
 ///
 /// Defined as: `Sk_{B} + hash(PXH || Pk)`, where `Sk_{B}` - is
@@ -108,14 +96,6 @@ fn pixel_hash_pubkey_scalar(
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PixelPrivateKey(pub secp256k1::SecretKey);
-
-impl Deref for PixelPrivateKey {
-    type Target = secp256k1::SecretKey;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 impl PixelPrivateKey {
     pub fn new(
@@ -149,7 +129,10 @@ impl PixelPrivateKey {
         }
 
         // hash(PXH, P_{B})
-        let pxh_b = pixel_hash_pubkey_scalar(&pxh.into(), &pubkey)?;
+        let pxh_b = pixelhash_pubkey_hash(&pxh.into(), &pubkey);
+
+        // Convert `hash(PXH, P_{B})` into scalar for next operation.
+        let pxh_b = Scalar::from_be_bytes(*pxh_b.as_byte_array())?;
 
         // (Sk_{B} + hash(PXH, P_{B})) mod P, where `P` curve order.
         //
@@ -163,42 +146,36 @@ impl PixelPrivateKey {
 /// This traits adds ability to types from external libraries to always return
 /// public key with even parity.
 pub trait ToEvenPublicKey {
-    fn even_public_key<C>(&self, ctx: &Secp256k1<C>) -> secp256k1::PublicKey
+    fn even_public_key<C>(&self, ctx: &Secp256k1<C>) -> PublicKey
     where
         C: Signing;
 }
 
+impl ToEvenPublicKey for PrivateKey {
+    fn even_public_key<C>(&self, ctx: &Secp256k1<C>) -> PublicKey
+    where
+        C: Signing,
+    {
+        let pubkey = self.public_key(ctx);
+
+        pubkey.even_public_key(ctx)
+    }
+}
+
 impl ToEvenPublicKey for PublicKey {
-    fn even_public_key<C>(&self, _ctx: &Secp256k1<C>) -> secp256k1::PublicKey
+    fn even_public_key<C>(&self, _ctx: &Secp256k1<C>) -> PublicKey
     where
         C: Signing,
     {
-        let (xonly, _parity) = self.inner.x_only_public_key();
+        let (xonly, parity) = self.inner.x_only_public_key();
 
-        xonly.public_key(Parity::Even)
-    }
-}
-
-impl ToEvenPublicKey for secp256k1::PublicKey {
-    fn even_public_key<C>(&self, _ctx: &Secp256k1<C>) -> secp256k1::PublicKey
-    where
-        C: Signing,
-    {
-        let (xonly, _parity) = self.x_only_public_key();
-
-        xonly.public_key(Parity::Even)
-    }
-}
-
-impl From<PixelKey> for PublicKey {
-    fn from(pxk: PixelKey) -> Self {
-        PublicKey::new(*pxk)
-    }
-}
-
-impl From<&PixelKey> for PublicKey {
-    fn from(pxk: &PixelKey) -> Self {
-        PublicKey::new(**pxk)
+        match parity {
+            Parity::Even => *self,
+            Parity::Odd => PublicKey::new(secp256k1::PublicKey::from_x_only_public_key(
+                xonly,
+                Parity::Even,
+            )),
+        }
     }
 }
 
@@ -235,7 +212,7 @@ mod tests {
         let derived = pxsk.0.public_key(&ctx);
 
         assert_eq!(
-            derived, *pxk,
+            derived, pxk.0.inner,
             "derived from private key, and public key got from hash MUST be equal"
         );
     }
@@ -247,5 +224,16 @@ mod tests {
         let pixel_key = PixelKey::new(p, &ISSUER.inner).unwrap();
 
         assert!(pixel_key.to_p2wpkh().is_some());
+    }
+
+    /// Provided uncompressed public key to pixel key
+    #[test]
+    fn test_pixel_key_uncompressed() {
+        let p = Pixel::new(100, *ISSUER);
+
+        let mut pixel_key = PixelKey::new(p, &ISSUER.inner).unwrap();
+        pixel_key.0 = PublicKey::new_uncompressed(ISSUER.inner);
+
+        assert!(pixel_key.to_p2wpkh().is_none());
     }
 }

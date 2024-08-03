@@ -8,12 +8,13 @@ use bdk::{
 use bitcoin::{
     key::XOnlyPublicKey,
     psbt::PartiallySignedTransaction,
-    secp256k1::{self, All, PublicKey, Secp256k1},
+    secp256k1::{self, All, Secp256k1},
     PrivateKey, ScriptBuf,
 };
 use eyre::bail;
 use yuv_pixels::{
-    MultisigPixelProof, MultisigWitness, P2WPKHWitness, Pixel, PixelPrivateKey, PixelProof,
+    LightningCommitmentProof, LightningCommitmentWitness, MultisigPixelProof, MultisigWintessData,
+    P2WPKHWitnessData, Pixel, PixelPrivateKey, PixelProof,
 };
 use yuv_types::ProofMap;
 
@@ -54,21 +55,21 @@ impl TransactionSigner {
                 PixelProof::Multisig(multisig_proof) => {
                     self.sign_multiproof_input(multisig_proof, psbt, *index)?;
                 }
+                PixelProof::Lightning(proof) => {
+                    self.sign_lightning_input(proof, psbt, *index)?;
+                }
                 #[cfg(feature = "bulletproof")]
                 PixelProof::Bulletproof(proof) => {
                     self.sign_input(proof.pixel, &proof.inner_key, psbt, *index)?;
                 }
-                PixelProof::EmptyPixel(proof) => {
-                    self.sign_input(Pixel::empty(), &proof.inner_key, psbt, *index)?;
-                }
-                PixelProof::LightningHtlc(_) | PixelProof::Lightning(_) => {
+                PixelProof::LightningHtlc(_htlc_proof) => {
                     bail!(
-                        r#"HTLC and Lightning inputs cannot be signed using BDK wallet. Only LDK node can
+                        r#"HTLC inputs cannot be signed using BDK wallet. Only LDK node can
                         spend it, as it has all required information and keys."#
                     )
                 }
-                PixelProof::P2WSH(_p2wsh_proof) => {
-                    bail!(r#"Signing P2WSH inputs is not supported yet."#)
+                PixelProof::EmptyPixel(proof) => {
+                    self.sign_input(Pixel::empty(), &proof.inner_key, psbt, *index)?;
                 }
             };
         }
@@ -152,10 +153,49 @@ impl TransactionSigner {
             .cloned()
             .collect::<Vec<_>>();
 
-        let witness = MultisigWitness::new(signatures, multisig_proof.to_reedem_script()?);
+        let witness = MultisigWintessData::new(signatures, multisig_proof.to_reedem_script()?);
 
         signed_input.final_script_sig = Some(ScriptBuf::new());
         signed_input.final_script_witness = Some(witness.into_witness());
+
+        Ok(())
+    }
+
+    fn sign_lightning_input(
+        &self,
+        proof: &LightningCommitmentProof,
+        psbt: &mut PartiallySignedTransaction,
+        index: u32,
+    ) -> eyre::Result<()> {
+        let signer = SignerWrapper::new(self.private_key, SignerContext::Segwitv0);
+
+        signer.sign_input(
+            psbt,
+            index as usize,
+            &SignOptions {
+                try_finalize: false,
+                trust_witness_utxo: true,
+                ..Default::default()
+            },
+            &self.ctx,
+        )?;
+
+        let signed_input = psbt
+            .inputs
+            .get_mut(index as usize)
+            .expect("Signed input should exist");
+
+        let signature = signed_input
+            .partial_sigs
+            .values()
+            .next()
+            .expect("Signature should exist");
+
+        let script = proof.to_redeem_script()?;
+        let witness = LightningCommitmentWitness::new(*signature, false, script);
+
+        signed_input.final_script_sig = Some(ScriptBuf::new());
+        signed_input.final_script_witness = Some(witness.into());
 
         Ok(())
     }
@@ -200,10 +240,7 @@ impl TransactionSigner {
         let signature = signed_input.partial_sigs.get(&tweaked_pubkey).unwrap();
 
         // And finalize it with witness data.
-        let witness = P2WPKHWitness::new(
-            *signature,
-            PublicKey::from_slice(&tweaked_pubkey.to_bytes()).unwrap(),
-        );
+        let witness = P2WPKHWitnessData::new(*signature, tweaked_pubkey);
 
         signed_input.final_script_witness = Some(witness.into());
         signed_input.final_script_sig = Some(ScriptBuf::new());

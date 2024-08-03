@@ -1,4 +1,3 @@
-use bdk::miniscript::ToPublicKey;
 use bitcoin::{Address, Network, PublicKey};
 use clap::Args;
 use color_eyre::eyre;
@@ -33,7 +32,7 @@ pub(crate) fn run(
 
     let pixel_key = PixelKey::new(pixel, &pubkey.inner)?;
 
-    let address = Address::p2wpkh(&pixel_key.to_public_key(), network)?;
+    let address = Address::p2wpkh(&pixel_key, network)?;
 
     println!("Address: {}", address);
 

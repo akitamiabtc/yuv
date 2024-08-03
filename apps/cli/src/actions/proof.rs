@@ -60,6 +60,7 @@ impl ProofListArgs {
         let inputs = inputs
             .map(|((recipient, amount), vin)| {
                 let pixel = Pixel::new(*amount, self.chroma);
+
                 (vin, PixelProof::sig(pixel, recipient.inner))
             })
             .collect::<BTreeMap<_, _>>();

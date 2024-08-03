@@ -248,9 +248,10 @@ impl Pixel {
     }
 
     pub fn empty() -> Self {
-        let zero_pubkey = PublicKey::from_slice(ZERO_PUBKEY_BYTES).expect("Pubkey should be valid");
-
-        Self::new(0, zero_pubkey)
+        Self {
+            luma: 0.into(),
+            chroma: Chroma::from(*ZERO_PUBLIC_KEY),
+        }
     }
 
     pub fn to_bytes(&self) -> [u8; PIXEL_SIZE] {
